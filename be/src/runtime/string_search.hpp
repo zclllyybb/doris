@@ -23,7 +23,7 @@
 
 #include "common/logging.h"
 #include "vec/common/string_ref.h"
-#include "vec/common/volnitsky.h"
+#include "vec/common/string_searcher.h"
 
 namespace doris {
 
@@ -36,7 +36,7 @@ public:
 
     void set_pattern(const StringRef* pattern) {
         _pattern = pattern;
-        _vol_searcher.reset(new Volnitsky(pattern->data, pattern->size));
+        _string_searcher.reset(new StringSearcher<true, false>(pattern->data, pattern->size));
     }
 
     // search for this pattern in str.
@@ -68,14 +68,15 @@ public:
             return str + len;
         }
 
-        return _vol_searcher->search(str, len);
+        return _string_searcher->search(str, len);
     }
 
     inline size_t get_pattern_length() { return _pattern ? _pattern->size : 0; }
 
 private:
     const StringRef* _pattern;
-    std::unique_ptr<Volnitsky> _vol_searcher;
+    //case sensitive and not only ascii
+    std::unique_ptr<StringSearcher<true, false>> _string_searcher;
 };
 
 } // namespace doris
