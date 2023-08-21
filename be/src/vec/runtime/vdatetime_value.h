@@ -24,8 +24,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <exception>
 #include <iostream>
 #include <iterator>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -67,6 +69,8 @@ enum TimeUnit {
     DAY_HOUR,
     YEAR_MONTH
 };
+
+TimeUnit parse_upper_to_timeunit(const std::string& str);
 
 struct TimeInterval {
     int64_t year;
