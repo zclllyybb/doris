@@ -176,6 +176,7 @@ Status BaseTabletsChannel::incremental_open(const PTabletWriterOpenRequest& para
        << " incremental open delta writer: ";
 
     for (const auto& tablet : params.tablets()) {
+        // for incremental open for this node as its first open, will done in open(), not here.
         if (_tablet_writers.find(tablet.tablet_id()) != _tablet_writers.end()) {
             continue;
         }
