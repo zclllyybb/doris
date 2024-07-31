@@ -343,6 +343,8 @@ struct TQueryOptions {
   131: optional i32 adaptive_pipeline_task_serial_read_on_limit = 10000;
 
   132: optional i32 parallel_prepare_threshold = 0;
+  
+  133: optional bool enable_auto_create_when_overwrite = false;
   // For cloud, to control if the content would be written into file cache
   // In write path, to control if the content would be written into file cache.
   // In read path, read from file cache or remote storage when execute query.
