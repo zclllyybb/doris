@@ -30,14 +30,10 @@ jobs:
           git config user.name "Cursor Agent"
           git config user.email "cursoragent@cursor.com"
 
-      - name: 执行自动代码审查
-        env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_TEST }}
-          MODEL: auto
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BLOCKING_REVIEW: ${{ vars.BLOCKING_REVIEW || 'false' }}
+      - name: 准备 cursor prompt 文件
         run: |
-          cursor-agent --force --model "$MODEL" --output-format=text --print '您正在 GitHub Actions 运行器中执行自动代码审查。gh 命令行界面可用并通过 GH_TOKEN 进行身份验证。您可以对拉取请求进行评论。
+          cat > $GITHUB_WORKSPACE/cursor_prompt.txt <<'EOF'
+          您正在 GitHub Actions 运行器中执行自动代码审查。gh 命令行界面可用并通过 GH_TOKEN 进行身份验证。您可以对拉取请求进行评论。
 
           上下文：
           - 仓库：${{ github.repository }}
@@ -94,7 +90,16 @@ jobs:
           - 如果 BLOCKING_REVIEW 为 true 且发布了任何 🚨 或 🔒 问题：echo "CRITICAL_ISSUES_FOUND=true" >> $GITHUB_ENV
           - 否则：echo "CRITICAL_ISSUES_FOUND=false" >> $GITHUB_ENV
           - 始终在最后设置 CRITICAL_ISSUES_FOUND
-          '
+        EOF
+
+      - name: 执行自动代码审查
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_TEST }}
+          MODEL: auto
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BLOCKING_REVIEW: ${{ vars.BLOCKING_REVIEW || 'false' }}
+        run: |
+          cursor-agent --force --model "$MODEL" --output-format=text --print < "$GITHUB_WORKSPACE/cursor_prompt.txt"
 
       - name: 检查阻塞审查结果
         if: env.BLOCKING_REVIEW == 'true'
