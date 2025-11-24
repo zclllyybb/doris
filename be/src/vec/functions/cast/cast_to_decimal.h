@@ -491,27 +491,22 @@ class CastToImpl<Mode, DataTypeString, ToDataType> : public CastToBase {
 
         auto to_type = block.get_by_position(result).type;
         auto serde = remove_nullable(to_type)->get_serde();
-        MutableColumnPtr column_to;
+
+        // by default framework, to_type is already unwrapped nullable
+        MutableColumnPtr column_to = to_type->create_column();
+        ColumnNullable::MutablePtr nullable_col_to = ColumnNullable::create(
+                std::move(column_to), ColumnUInt8::create(input_rows_count, 0));
 
         if constexpr (Mode == CastModeType::NonStrictMode) {
-            auto to_nullable_type = make_nullable(to_type);
-            column_to = to_nullable_type->create_column();
-            auto& nullable_col_to = assert_cast<ColumnNullable&>(*column_to);
-            RETURN_IF_ERROR(serde->from_string_batch(*col_from, nullable_col_to, {}));
+            RETURN_IF_ERROR(serde->from_string_batch(*col_from, *nullable_col_to, {}));
         } else if constexpr (Mode == CastModeType::StrictMode) {
-            if (to_type->is_nullable()) {
-                return Status::InternalError(
-                        "result type should be not nullable when casting string to decimal in "
-                        "strict cast mode");
-            }
-            column_to = to_type->create_column();
-            RETURN_IF_ERROR(
-                    serde->from_string_strict_mode_batch(*col_from, *column_to, {}, null_map));
+            RETURN_IF_ERROR(serde->from_string_strict_mode_batch(
+                    *col_from, nullable_col_to->get_nested_column(), {}, null_map));
         } else {
             return Status::InternalError("Unsupported cast mode");
         }
 
-        block.get_by_position(result).column = std::move(column_to);
+        block.get_by_position(result).column = std::move(nullable_col_to);
         return Status::OK();
     }
 };
@@ -548,7 +543,7 @@ public:
         auto from_max_int_digit_count = from_precision - from_scale;
         auto to_max_int_digit_count = to_precision - to_scale;
         bool narrow_integral = (to_max_int_digit_count < from_max_int_digit_count);
-        bool result_is_nullable = (CastMode == CastModeType::NonStrictMode) && narrow_integral;
+        bool result_is_nullable = narrow_integral;
 
         constexpr UInt32 to_max_digits =
                 NumberTraits::max_ascii_len<typename ToFieldType::NativeType>();
@@ -743,7 +738,7 @@ public:
                                (to_max_int_digit_count == from_max_int_digit_count &&
                                 to_scale < from_original_scale);
 
-        bool result_is_nullable = (CastMode == CastModeType::NonStrictMode) && narrow_integral;
+        bool result_is_nullable = narrow_integral;
 
         size_t size = col_from->size();
         ColumnUInt8::MutablePtr col_null_map_to;
@@ -851,7 +846,7 @@ public:
                 (to_max_int_digit_count < from_max_int_digit_count) ||
                 (to_max_int_digit_count == from_max_int_digit_count && to_scale < from_scale);
 
-        bool result_is_nullable = (CastMode == CastModeType::NonStrictMode) && narrow_integral;
+        bool result_is_nullable = narrow_integral;
 
         size_t size = col_from->size();
         ColumnUInt8::MutablePtr col_null_map_to;
