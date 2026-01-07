@@ -16,6 +16,7 @@
 // under the License.
 
 #include "hashjoin_build_sink.h"
+#include <glog/logging.h>
 
 #include <cstdlib>
 #include <string>
@@ -373,10 +374,16 @@ Status HashJoinBuildSinkLocalState::process_build_block(RuntimeState* state,
         // first row is mocked
         for (int i = 0; i < block.columns(); i++) {
             auto [column, is_const] = unpack_if_const(block.safe_get_by_position(i).column);
-            assert_cast<vectorized::ColumnNullable*>(column->assume_mutable().get())
-                    ->get_null_map_column()
-                    .get_data()
-                    .data()[0] = 1;
+            auto* nullable_col =
+                    assert_cast<vectorized::ColumnNullable*>(column->assume_mutable().get());
+            nullable_col->get_null_map_column().get_data().data()[0] = 1;
+            DCHECK(!is_const);
+            { // set a row of valid default value to column.
+                auto nested = nullable_col->get_nested_column().assume_mutable();
+                auto default_col = nested->clone_empty();
+                default_col->insert_default();
+                nested->replace_column_data(*default_col, 0, 0);
+            }
         }
     }
 

@@ -144,7 +144,12 @@ public:
 
         const auto* col_from = check_and_get_column<typename FromDataType::ColumnType>(
                 block.get_by_position(arguments[0]).column.get());
-        auto col_to = ToDataType::ColumnType::create(input_rows_count);
+        auto col_to = ToDataType::ColumnType::create();
+        if (null_map) {
+            col_to->insert_many_defaults(input_rows_count);
+        } else {
+            col_to->resize(input_rows_count);
+        }
         ColumnUInt8::MutablePtr col_nullmap;
 
         if constexpr (Nullable) {

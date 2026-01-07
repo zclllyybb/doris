@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -1860,9 +1861,8 @@ public:
             auto tv2 = static_cast<TimeValue::TimeType>(arg2);
             TimeInterval interval(TimeUnit::MICROSECOND, tv2, Impl::is_negative());
             bool out_range = dtv1.template date_add_interval<TimeUnit::MICROSECOND>(interval);
-            if (UNLIKELY(!out_range)) {
-                throw Exception(ErrorCode::INVALID_ARGUMENT,
-                                "datetime value is out of range in function {}", name);
+            if (!out_range) [[unlikely]] {
+                throw_invalid_strings(Impl::name, dtv1.to_string(), std::to_string(arg2));
             }
             return binary_cast<DateV2Value<DateTimeV2ValueType>, ReturnNativeType>(dtv1);
         } else if constexpr (PType == TYPE_TIMEV2) {

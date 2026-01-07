@@ -86,7 +86,12 @@ public:
                 assert_cast<const ColumnDateTimeV2&>(*block.get_by_position(arguments[0]).column)
                         .get_data();
 
-        auto col_to = ColumnTimeStampTz::create(input_rows_count);
+        auto col_to = ColumnTimeStampTz::create();
+        if (null_map) {
+            col_to->insert_many_defaults(input_rows_count);
+        } else {
+            col_to->resize(input_rows_count);
+        }
         auto& col_to_data = col_to->get_data();
         const auto& local_time_zone = context->state()->timezone_obj();
 
@@ -162,7 +167,12 @@ public:
                 assert_cast<const ColumnTimeStampTz&>(*block.get_by_position(arguments[0]).column)
                         .get_data();
 
-        auto col_to = ColumnTimeStampTz::create(input_rows_count);
+        auto col_to = ColumnTimeStampTz::create();
+        if (null_map) {
+            col_to->insert_many_defaults(input_rows_count);
+        } else {
+            col_to->resize(input_rows_count);
+        }
         auto& col_to_data = col_to->get_data();
         const auto& local_time_zone = context->state()->timezone_obj();
 
