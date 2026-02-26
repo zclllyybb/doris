@@ -1244,8 +1244,7 @@ public:
         res_offset.resize(input_rows_count);
 
         VectorizedUtils::update_null_map(null_map->get_data(), *null_list[0]);
-        fmt::memory_buffer buffer;
-        std::vector<std::string_view> views;
+        std::string buffer;
 
         if (is_column<ColumnArray>(argument_columns[1].get())) {
             // Determine if the nested type of the array is String
@@ -1259,13 +1258,13 @@ public:
                                     get_name()));
             }
             // Concat string in array
-            _execute_array(input_rows_count, array_column, buffer, views, offsets_list, chars_list,
+            _execute_array(input_rows_count, array_column, buffer, offsets_list, chars_list,
                            null_list, res_data, res_offset);
 
         } else {
             // Concat string
-            _execute_string(input_rows_count, argument_size, buffer, views, offsets_list,
-                            chars_list, null_list, res_data, res_offset);
+            _execute_string(input_rows_count, argument_size, buffer, offsets_list, chars_list,
+                            null_list, res_data, res_offset);
         }
         if (is_null_type) {
             block.get_by_position(result).column =
@@ -1278,8 +1277,7 @@ public:
 
 private:
     void _execute_array(const size_t& input_rows_count, const ColumnArray& array_column,
-                        fmt::memory_buffer& buffer, std::vector<std::string_view>& views,
-                        const std::vector<const Offsets*>& offsets_list,
+                        std::string& buffer, const std::vector<const Offsets*>& offsets_list,
                         const std::vector<const Chars*>& chars_list,
                         const std::vector<const ColumnUInt8::Container*>& null_list,
                         Chars& res_data, Offsets& res_offset) const {
@@ -1321,7 +1319,7 @@ private:
 
             std::string_view sep(sep_data, sep_size);
             buffer.clear();
-            views.clear();
+            bool is_first = true;
 
             for (auto next_src_array_offset = src_array_offsets[i];
                  current_src_array_offset < next_src_array_offset; ++current_src_array_offset) {
@@ -1335,11 +1333,13 @@ private:
 
                 if (array_nested_null_map == nullptr ||
                     !array_nested_null_map[current_src_array_offset]) {
-                    views.emplace_back(ptr, bytes_to_copy);
+                    if (!is_first) {
+                        buffer.append(sep.data(), sep.size());
+                    }
+                    buffer.append(ptr, bytes_to_copy);
+                    is_first = false;
                 }
             }
-
-            fmt::format_to(buffer, "{}", fmt::join(views, sep));
 
             StringOP::push_value_string(std::string_view(buffer.data(), buffer.size()), i, res_data,
                                         res_offset);
@@ -1347,8 +1347,7 @@ private:
     }
 
     void _execute_string(const size_t& input_rows_count, const size_t& argument_size,
-                         fmt::memory_buffer& buffer, std::vector<std::string_view>& views,
-                         const std::vector<const Offsets*>& offsets_list,
+                         std::string& buffer, const std::vector<const Offsets*>& offsets_list,
                          const std::vector<const Chars*>& chars_list,
                          const std::vector<const ColumnUInt8::Container*>& null_list,
                          Chars& res_data, Offsets& res_offset) const {
@@ -1367,7 +1366,7 @@ private:
 
             std::string_view sep(sep_data, sep_size);
             buffer.clear();
-            views.clear();
+            bool is_first = true;
             for (size_t j = 1; j < argument_size; ++j) {
                 auto& current_offsets = *offsets_list[j];
                 auto& current_chars = *chars_list[j];
@@ -1376,10 +1375,13 @@ private:
                 const char* ptr =
                         reinterpret_cast<const char*>(&current_chars[current_offsets[i - 1]]);
                 if (!current_nullmap[i]) {
-                    views.emplace_back(ptr, size);
+                    if (!is_first) {
+                        buffer.append(sep.data(), sep.size());
+                    }
+                    buffer.append(ptr, size);
+                    is_first = false;
                 }
             }
-            fmt::format_to(buffer, "{}", fmt::join(views, sep));
             StringOP::push_value_string(std::string_view(buffer.data(), buffer.size()), i, res_data,
                                         res_offset);
         }
