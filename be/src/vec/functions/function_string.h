@@ -2969,13 +2969,13 @@ StringRef do_money_format(FunctionContext* context, UInt32 scale, T int_value, T
         DCHECK(scale <= 38);
         // do rounding, so we need to reserve 3 digits.
         auto multiplier = common::exp10_i128(std::abs(static_cast<int>(scale - 3)));
-        // do devide first to avoid overflow
+        // do divide first to avoid overflow
         // after round frac_value will be positive by design.
         frac_value = std::abs(static_cast<int>(frac_value / multiplier)) + 5;
         frac_value /= 10;
     } else if (scale < 2) {
         DCHECK(frac_value < 100);
-        // since scale <= 2, overflow is impossiable
+        // since scale <= 2, overflow is impossible
         frac_value = frac_value * common::exp10_i32(2 - scale);
     }
 
@@ -3029,14 +3029,14 @@ StringRef do_money_format(FunctionContext* context, UInt32 scale, wide::Int256 i
         DCHECK(scale <= 76);
         // do rounding, so we need to reserve 3 digits.
         wide::Int256 multiplier = common::exp10_i256(std::abs(static_cast<int>(scale - 3)));
-        // do devide first to avoid overflow
+        // do divide first to avoid overflow
         // after round frac_value will be positive by design.
         wide::Int256 abs_frac = frac_value < 0 ? -frac_value : frac_value;
         frac_value = abs_frac / multiplier + 5;
         frac_value /= 10;
     } else if (scale < 2) {
         DCHECK(frac_value < 100);
-        // since scale <= 2, overflow is impossiable
+        // since scale <= 2, overflow is impossible
         frac_value = frac_value * common::exp10_i256(2 - scale);
     }
 
