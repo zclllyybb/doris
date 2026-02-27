@@ -2952,6 +2952,12 @@ constexpr size_t MAX_FORMAT_LEN_INT128() {
     return 2 * (1 + 39 + (39 / 3) + 3);
 }
 
+constexpr size_t MAX_FORMAT_LEN_DEC256() {
+    // Decimal(76, 0)
+    // Double the size to avoid some unexpected bug.
+    return 2 * (1 + 76 + (76 / 3) + 3);
+}
+
 template <typename T, size_t N>
 StringRef do_money_format(FunctionContext* context, UInt32 scale, T int_value, T frac_value) {
     static_assert(std::is_integral<T>::value);
@@ -3009,6 +3015,91 @@ StringRef do_money_format(FunctionContext* context, UInt32 scale, T int_value, T
     *(result_data + whole_decimal_str_len - 3) = '.';
     *(result_data + whole_decimal_str_len - 2) = '0' + std::abs(static_cast<int>(frac_value / 10));
     *(result_data + whole_decimal_str_len - 1) = '0' + std::abs(static_cast<int>(frac_value % 10));
+    return result;
+};
+
+template <size_t N>
+StringRef do_money_format(FunctionContext* context, UInt32 scale, wide::Int256 int_value,
+                          wide::Int256 frac_value) {
+    const bool is_negative = int_value < 0 || frac_value < 0;
+
+    // do round to frac_part
+    // magic number 2: since we need to round frac_part to 2 digits
+    if (scale > 2) {
+        DCHECK(scale <= 76);
+        // do rounding, so we need to reserve 3 digits.
+        wide::Int256 multiplier = common::exp10_i256(std::abs(static_cast<int>(scale - 3)));
+        // do devide first to avoid overflow
+        // after round frac_value will be positive by design.
+        wide::Int256 abs_frac = frac_value < 0 ? -frac_value : frac_value;
+        frac_value = abs_frac / multiplier + 5;
+        frac_value /= 10;
+    } else if (scale < 2) {
+        DCHECK(frac_value < 100);
+        // since scale <= 2, overflow is impossiable
+        frac_value = frac_value * common::exp10_i256(2 - scale);
+    }
+
+    if (frac_value == 100) {
+        if (is_negative) {
+            int_value -= 1;
+        } else {
+            int_value += 1;
+        }
+        frac_value = 0;
+    }
+
+    bool append_sign_manually = false;
+    if (is_negative && int_value == 0) {
+        // when int_value is 0, result of SimpleItoaWithCommas will contains just zero
+        // for Decimal like -0.1234, this will leads to problem, because negative sign is discarded.
+        // this is why we introduce argument append_sign_manually.
+        append_sign_manually = true;
+    }
+
+    char local[N];
+    char* p = local + N;
+    wide::UInt256 n =
+            int_value < 0 ? wide::UInt256(0) - wide::UInt256(int_value) : wide::UInt256(int_value);
+    *--p = '0' + static_cast<int>(n % 10);
+    n /= 10;
+    while (n) {
+        *--p = '0' + static_cast<int>(n % 10);
+        n /= 10;
+        if (n == 0) {
+            break;
+        }
+        *--p = '0' + static_cast<int>(n % 10);
+        n /= 10;
+        if (n == 0) {
+            break;
+        }
+        *--p = ',';
+        *--p = '0' + static_cast<int>(n % 10);
+        n /= 10;
+    }
+    if (int_value < 0) {
+        *--p = '-';
+    }
+
+    const Int32 integer_str_len = N - (p - local);
+    const Int32 frac_str_len = 2;
+    const Int32 whole_decimal_str_len =
+            (append_sign_manually ? 1 : 0) + integer_str_len + 1 + frac_str_len;
+
+    StringRef result = context->create_temp_string_val(whole_decimal_str_len);
+    // Modify a string passed via stringref
+    char* result_data = const_cast<char*>(result.data);
+
+    if (append_sign_manually) {
+        memset(result_data, '-', 1);
+    }
+
+    memcpy(result_data + (append_sign_manually ? 1 : 0), p, integer_str_len);
+    *(result_data + whole_decimal_str_len - 3) = '.';
+    wide::Int256 abs_frac_value = frac_value < 0 ? -frac_value : frac_value;
+    *(result_data + whole_decimal_str_len - 2) = '0' + static_cast<int>(abs_frac_value / 10 % 10);
+    *(result_data + whole_decimal_str_len - 1) = '0' + static_cast<int>(abs_frac_value % 10);
     return result;
 };
 
@@ -3259,31 +3350,21 @@ struct MoneyFormatDecimalImpl {
 
                 result_column->insert_data(str.data, str.size);
             }
+        } else if (auto* decimal256_column = check_and_get_column<ColumnDecimal256>(*col_ptr)) {
+            const UInt32 scale = decimal256_column->get_scale();
+            for (size_t i = 0; i < input_rows_count; i++) {
+                const wide::Int256& frac_part = decimal256_column->get_fractional_part(i);
+                const wide::Int256& whole_part = decimal256_column->get_intergral_part(i);
+
+                StringRef str = MoneyFormat::do_money_format<MoneyFormat::MAX_FORMAT_LEN_DEC256()>(
+                        context, scale, whole_part, frac_part);
+
+                result_column->insert_data(str.data, str.size);
+            }
         } else {
             throw doris::Exception(ErrorCode::INVALID_ARGUMENT,
                                    "Not supported input argument type {}", col_ptr->get_name());
         }
-        // TODO: decimal256
-        /* else if (auto* decimal256_column =
-                           check_and_get_column<ColumnDecimal<Decimal256>>(*col_ptr)) {
-            const UInt32 scale = decimal256_column->get_scale();
-            const auto multiplier =
-                    scale > 2 ? common::exp10_i32(scale - 2) : common::exp10_i32(2 - scale);
-            for (size_t i = 0; i < input_rows_count; i++) {
-                Decimal256 frac_part = decimal256_column->get_fractional_part(i);
-                if (scale > 2) {
-                    int delta = ((frac_part % multiplier) << 1) > multiplier;
-                    frac_part = Decimal256(frac_part / multiplier + delta);
-                } else if (scale < 2) {
-                    frac_part = Decimal256(frac_part * multiplier);
-                }
-
-                StringRef str = MoneyFormat::do_money_format<int64_t, 26>(
-                        context, decimal256_column->get_intergral_part(i), frac_part);
-
-                result_column->insert_data(str.data, str.size);
-            }
-        }*/
     }
 };
 

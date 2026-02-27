@@ -59,6 +59,21 @@ suite("test_money_format") {
     qt_money_format_dec128_38_38 """select money_format(cast(concat('0.', repeat('9', 38)) as DECIMALV3(38, 38)));"""
     qt_money_format_dec128_38_38_negative """select money_format(cast(concat('-', '0.', repeat('9', 38)) as DECIMALV3(38, 38)));"""
 
+    sql "set enable_decimal256=true;"
+    qt_money_format_dec256_76_0 """select money_format(cast(concat(repeat('9', 76)) as DECIMALV3(76, 0)));"""
+    qt_money_format_dec256_76_0_negative """select money_format(cast(concat('-', repeat('9', 76)) as DECIMALV3(76, 0)));"""
+    qt_money_format_dec256_76_1 """select money_format(cast(concat(repeat('9', 75), '.', repeat('9', 1)) as DECIMALV3(76, 1)));"""
+    qt_money_format_dec256_76_1_negative """select money_format(cast(concat('-', repeat('9', 75), '.', repeat('9', 1)) as DECIMALV3(76, 1)));"""
+    qt_money_format_dec256_76_2 """select money_format(cast(concat(repeat('9', 74), '.', repeat('9', 2)) as DECIMALV3(76, 2)));"""
+    qt_money_format_dec256_76_2_negative """select money_format(cast(concat('-', repeat('9', 74), '.', repeat('9', 2)) as DECIMALV3(76, 2)));"""
+    qt_money_format_dec256_76_76 """select money_format(cast(concat('0.', repeat('9', 76)) as DECIMALV3(76, 76)));"""
+    qt_money_format_dec256_76_76_negative """select money_format(cast(concat('-', '0.', repeat('9', 76)) as DECIMALV3(76, 76)));"""
+    // rounding with carry: 0.999 (scale=3) rounds to 1.00, and 1234.999 carries into the integer part
+    qt_money_format_dec256_76_3_round_carry """select money_format(cast('0.999' as DECIMALV3(76, 3)));"""
+    qt_money_format_dec256_76_3_round_carry_negative """select money_format(cast('-0.999' as DECIMALV3(76, 3)));"""
+    qt_money_format_dec256_76_3_round_int_carry """select money_format(cast('1234.999' as DECIMALV3(76, 3)));"""
+    sql "set enable_decimal256=false;"
+
     qt_money_format_interger "select money_format(1);"
     qt_money_format_interger "select money_format(-1);"
     qt_money_format_interger "select money_format(1233456789);"
