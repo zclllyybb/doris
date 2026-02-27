@@ -2992,7 +2992,7 @@ StringRef do_money_format(FunctionContext* context, UInt32 scale, T int_value, T
     if (is_negative && int_value == 0) {
         // when int_value is 0, result of SimpleItoaWithCommas will contains just zero
         // for Decimal like -0.1234, this will leads to problem, because negative sign is discarded.
-        // this is why we introduce argument append_sing_manually.
+        // this is why we introduce argument append_sign_manually.
         append_sign_manually = true;
     }
 
@@ -3057,6 +3057,9 @@ StringRef do_money_format(FunctionContext* context, UInt32 scale, wide::Int256 i
         append_sign_manually = true;
     }
 
+    // SimpleItoaWithCommas cannot be used here because wide::Int256 is not a standard integral
+    // type and std::make_unsigned_t<wide::Int256> is not defined. Instead, we replicate the
+    // same digit-extraction logic inline using wide::UInt256.
     char local[N];
     char* p = local + N;
     wide::UInt256 n = wide::UInt256(int_value);

@@ -66,6 +66,15 @@ suite("test_money_format") {
     qt_money_format_dec256_76_1_negative """select money_format(cast(concat('-', repeat('9', 75), '.', repeat('9', 1)) as DECIMALV3(76, 1)));"""
     qt_money_format_dec256_76_2 """select money_format(cast(concat(repeat('9', 74), '.', repeat('9', 2)) as DECIMALV3(76, 2)));"""
     qt_money_format_dec256_76_2_negative """select money_format(cast(concat('-', repeat('9', 74), '.', repeat('9', 2)) as DECIMALV3(76, 2)));"""
+    // zero value: both scale=0 and scale=2 should produce "0.00"
+    qt_money_format_dec256_zero_scale0 """select money_format(cast('0' as DECIMALV3(76, 0)));"""
+    qt_money_format_dec256_zero_scale2 """select money_format(cast('0.00' as DECIMALV3(76, 2)));"""
+    // mid-range scale=10: all-nines values round up with integer carry
+    qt_money_format_dec256_76_10 """select money_format(cast(concat(repeat('9', 66), '.', repeat('9', 10)) as DECIMALV3(76, 10)));"""
+    qt_money_format_dec256_76_10_negative """select money_format(cast(concat('-', repeat('9', 66), '.', repeat('9', 10)) as DECIMALV3(76, 10)));"""
+    // mid-range scale=40: 9.999...40 nines rounds to 10.00
+    qt_money_format_dec256_76_40 """select money_format(cast(concat('9.', repeat('9', 40)) as DECIMALV3(76, 40)));"""
+    qt_money_format_dec256_76_40_negative """select money_format(cast(concat('-', '9.', repeat('9', 40)) as DECIMALV3(76, 40)));"""
     qt_money_format_dec256_76_76 """select money_format(cast(concat('0.', repeat('9', 76)) as DECIMALV3(76, 76)));"""
     qt_money_format_dec256_76_76_negative """select money_format(cast(concat('-', '0.', repeat('9', 76)) as DECIMALV3(76, 76)));"""
     // -0.xxx: integer part is 0 but value is negative, exercises append_sign_manually logic
