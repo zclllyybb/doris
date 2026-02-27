@@ -137,6 +137,9 @@
 -- !money_format_dec256_76_76_negative --
 -1.00
 
+-- !money_format_dec256_neg_zero_frac --
+-0.50
+
 -- !money_format_dec256_76_3_round_carry --
 1.00
 

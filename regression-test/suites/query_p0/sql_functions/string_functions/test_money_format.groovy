@@ -68,6 +68,8 @@ suite("test_money_format") {
     qt_money_format_dec256_76_2_negative """select money_format(cast(concat('-', repeat('9', 74), '.', repeat('9', 2)) as DECIMALV3(76, 2)));"""
     qt_money_format_dec256_76_76 """select money_format(cast(concat('0.', repeat('9', 76)) as DECIMALV3(76, 76)));"""
     qt_money_format_dec256_76_76_negative """select money_format(cast(concat('-', '0.', repeat('9', 76)) as DECIMALV3(76, 76)));"""
+    // -0.xxx: integer part is 0 but value is negative, exercises append_sign_manually logic
+    qt_money_format_dec256_neg_zero_frac """select money_format(cast('-0.5' as DECIMALV3(76, 1)));"""
     // rounding with carry: 0.999 (scale=3) rounds to 1.00, and 1234.999 carries into the integer part
     qt_money_format_dec256_76_3_round_carry """select money_format(cast('0.999' as DECIMALV3(76, 3)));"""
     qt_money_format_dec256_76_3_round_carry_negative """select money_format(cast('-0.999' as DECIMALV3(76, 3)));"""

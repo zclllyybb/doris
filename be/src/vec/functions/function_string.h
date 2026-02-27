@@ -3059,8 +3059,10 @@ StringRef do_money_format(FunctionContext* context, UInt32 scale, wide::Int256 i
 
     char local[N];
     char* p = local + N;
-    wide::UInt256 n =
-            int_value < 0 ? wide::UInt256(0) - wide::UInt256(int_value) : wide::UInt256(int_value);
+    wide::UInt256 n = wide::UInt256(int_value);
+    if (int_value < 0) {
+        n = wide::UInt256(0) - n;
+    }
     *--p = '0' + static_cast<int>(n % 10);
     n /= 10;
     while (n) {
