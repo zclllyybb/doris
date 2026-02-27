@@ -73,6 +73,11 @@ suite("test_money_format") {
     qt_money_format_dec256_76_3_round_carry_negative """select money_format(cast('-0.999' as DECIMALV3(76, 3)));"""
     qt_money_format_dec256_76_3_round_int_carry """select money_format(cast('1234.999' as DECIMALV3(76, 3)));"""
     sql "set enable_decimal256=false;"
+    // when enable_decimal256=false, FE rejects creating a DECIMALV3 with precision > 38
+    test {
+        sql """select money_format(cast('123.45' as DECIMALV3(76, 2)));"""
+        exception "is disabled by default"
+    }
 
     qt_money_format_interger "select money_format(1);"
     qt_money_format_interger "select money_format(-1);"
