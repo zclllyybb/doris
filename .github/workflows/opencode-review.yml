@@ -1,0 +1,161 @@
+name: 代码审查
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        model:
+          - openrouter/anthropic/claude-sonnet-4.6
+          - openrouter/anthropic/claude-opus-4.6
+          - openrouter/z-ai/glm-5
+          - openrouter/qwen/qwen3.5-plus-02-15
+          - openrouter/moonshotai/kimi-k2.5
+      fail-fast: false
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/review') &&
+      (
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    steps:
+      - name: 获取 PR 信息
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_JSON=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }})
+          HEAD_SHA=$(echo "$PR_JSON" | jq -r '.head.sha')
+          BASE_SHA=$(echo "$PR_JSON" | jq -r '.base.sha')
+          HEAD_REF=$(echo "$PR_JSON" | jq -r '.head.ref')
+          BASE_REF=$(echo "$PR_JSON" | jq -r '.base.ref')
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+
+      - name: 安装 OpenCode
+        run: |
+          for attempt in 1 2 3; do
+            if curl -fsSL https://opencode.ai/install | bash; then
+              echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+              exit 0
+            fi
+            echo "Install attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "All install attempts failed"
+          exit 1
+
+      - name: 配置 OpenCode 认证
+        run: |
+          mkdir -p ~/.local/share/opencode
+          echo "{\"openrouter\":{\"type\":\"api\",\"key\":\"${OPENROUTER_API_KEY}\"}}" > ~/.local/share/opencode/auth.json
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENCODE_SK }}
+
+      - name: 配置 OpenCode 权限
+        run: |
+          echo '{"permission":"allow"}' > opencode.json
+
+      - name: 提取模型短名
+        id: model_info
+        run: |
+          FULL_MODEL="${{ matrix.model }}"
+          SHORT_NAME=$(echo "$FULL_MODEL" | awk -F'/' '{print $NF}')
+          echo "short_name=$SHORT_NAME" >> "$GITHUB_OUTPUT"
+          echo "full_model=$FULL_MODEL" >> "$GITHUB_OUTPUT"
+
+      - name: 准备审查 Prompt
+        run: |
+          cat > /tmp/review_prompt.txt <<PROMPT
+          You are performing an automated code review inside a GitHub Actions runner. The gh CLI is available and authenticated via GH_TOKEN. You can comment on the pull request.
+
+          Context:
+          - Repository: $REPO
+          - PR number: $PR_NUMBER
+          - PR Head SHA: $HEAD_SHA
+          - PR Base SHA: $BASE_SHA
+          - Review model: $MODEL_SHORT_NAME
+
+          IMPORTANT: You MUST prefix ALL your review comments and review body with "[$MODEL_SHORT_NAME] " so readers can identify which model produced this review. For example, the review body should start with "[$MODEL_SHORT_NAME] ..." and each inline comment body should start with "[$MODEL_SHORT_NAME] ...".
+
+          ## Your review process
+
+          When reviewing code, you must first clarify the entire context and flow of the related code. If there are similar implementations, you should also refer to them first. Only after fully understanding the programming conventions and habits here should you proceed to deeply study the code you are reviewing.
+          After understanding the complete function implementation, a complete flowchart should be provided if control flow is involved. For critical judgments, the reasons for correctness and error should be explained in conjunction with the scenario.
+          You need to identify whether any boundary cases have been overlooked in the entire process, paying attention to not leave out "possibilities," but instead explicitly stating whether a certain possibility has been ignored based on the actual conventions implied by the context.
+          Identify code with obvious performance issues (such as incorrect complexity, large containers that can be resized in advance, and other clearly optimizable situations).
+
+          ## Review Criteria
+          1. Does the change correctly and completely address the task?
+          2. Are there any bugs, logic errors, or regressions?
+          3. Compare with existing similar features and context (if any), does it follow the existing code style and conventions?
+          4. Is the change minimal and focused (no unrelated modifications)?
+          5. Is there any redundant and obviously simplifiable code and processes? From a software engineering perspective, are the overall and local implementations already close to the most reasonable?
+          6. Is there any need for test coverage? Are there enough test cases? For bug fixes, there should be cases that can reproduce the original problem. Refactoring can initially assume that the original tests are sufficient, but new features must have full coverage.
+
+          ## Workflow
+          - Fetch the diff: gh pr diff $PR_NUMBER
+          - Fetch changed files with patch to compute inline positions: gh api repos/$REPO/pulls/$PR_NUMBER/files --paginate --jq '.[] | {filename,patch}'
+          - Read the relevant source files around changes to understand full context.
+          - For each issue, compute the exact inline anchor (file path + diff position). Comments must be placed inline on changed lines in the diff, not as top-level comments.
+          - Only analyze:
+              - Null/undefined dereferences
+              - Resource leaks (unclosed files or connections)
+              - Injection attacks (SQL/XSS)
+              - Concurrency/race conditions
+              - Missing error handling for critical operations
+              - Obvious logic errors with incorrect behavior
+              - Clear performance anti-patterns with measurable impact
+              - Clear security vulnerabilities
+              - Boundary case oversights
+          - Avoid duplicates: if similar feedback already exists on the same or nearby lines, skip.
+
+          ## Comment rules
+          - At most 10 inline comments; prioritize the most critical issues
+          - One issue per comment; place on the exact changed line
+          - All issue comments must be inline (anchored to file and line/position in the PR diff)
+          - Natural tone, specific and actionable; do not mention automation or high confidence
+          - Use emoji: critical, security, performance, logic, resolved, improvement
+          - REMEMBER: Every comment body and the review summary body MUST start with "[$MODEL_SHORT_NAME] "
+
+          ## Submission
+          - If no issues to report, submit a short summary comment saying no issues found using: gh pr comment $PR_NUMBER --body "[$MODEL_SHORT_NAME] No issues found"
+          - If issues found, submit a review with only inline comments plus an optional concise summary body. Use GitHub Reviews API to ensure comments are inline:
+              - Build a JSON array of comments like: [{ "path": "<file>", "position": <diff_position>, "body": "[$MODEL_SHORT_NAME] ..." }]
+              - Submit via: gh api repos/$REPO/pulls/$PR_NUMBER/reviews --input <json_file>
+              - The JSON file should contain: {"event":"COMMENT","body":"[$MODEL_SHORT_NAME] <summary>","comments":[...]}
+          - Do not use: gh pr review --approve or --request-changes
+          PROMPT
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          MODEL_SHORT_NAME: ${{ steps.model_info.outputs.short_name }}
+
+      - name: 执行自动代码审查 (${{ steps.model_info.outputs.short_name }})
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENCODE_SK }}
+        run: |
+          PROMPT=$(cat /tmp/review_prompt.txt)
+          opencode run "$PROMPT" -m "${{ matrix.model }}"
