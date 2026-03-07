@@ -208,6 +208,13 @@ Vectorized columns (`IColumn`) use custom intrusive reference-counted Copy-on-Wr
 - [ ] Do cache values inherit from `LRUCacheValueBase`? This base class automatically releases tracking bytes on destruction
 - [ ] Are new cache types registered with `CacheManager`? Unregistered caches don't participate in global GC
 
+#### 2.2.5 Static/Global Variable Initialization Order
+
+- [ ] Does the diff add or modify any `static` / global variable definition in a `.cpp` file? If the initializer references any static/global variable from another file (header or .cpp), this is a **SIOF** (static initialization order fiasco) — C++ does not define initialization order across translation units, so the dependency may be zero/garbage at the point of use.
+  - **Unsafe**: `const Foo Foo::X = Foo(Bar::Y.method());` in `foo.cpp`, where `Bar::Y` is `inline` in `bar.h` or defined in `bar.cpp` — different TU, order undefined
+  - **Safe**: `inline const Foo Foo::X = Foo(Bar::Y.method());` in `foo.h` where `bar.h` is included — same TU for every includer
+  - **Fix**: use `constexpr`, move to same header as `inline`, or use function-local static (Meyers' singleton)
+
 ### 2.3 Concurrency and Locks
 
 #### 2.3.1 Tablet Lock Hierarchy
