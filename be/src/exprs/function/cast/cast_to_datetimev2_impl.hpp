@@ -82,7 +82,11 @@ template <bool IsStrict>
  * return value: whether the cast is successful or not.
  * `params.status`: set error code ONLY IN STRICT MODE.
  */
+struct CastToTimestampTz;
+
 struct CastToDatetimeV2 {
+    friend struct CastToTimestampTz;
+
     // may be slow
     template <typename T>
     static inline bool from_integer(T int_val, DateV2Value<DateTimeV2ValueType>& val,
@@ -180,11 +184,14 @@ struct CastToDatetimeV2 {
 
     // this code follow rules of strict mode, but whether it RUNNING IN strict mode or not depends on the `IsStrict`
     // parameter. if it's false, we dont set error code for performance and we dont need.
-    template <bool IsStrict, DataTimeCastEnumType type = DataTimeCastEnumType::DATE_TIME>
+    template <bool IsStrict>
     static inline bool from_string_strict_mode(const StringRef& str,
                                                DateV2Value<DateTimeV2ValueType>& res,
                                                const cctz::time_zone* local_time_zone,
-                                               uint32_t to_scale, CastParameters& params);
+                                               uint32_t to_scale, CastParameters& params) {
+        return from_string_strict_mode_internal<IsStrict, DataTimeCastEnumType::DATE_TIME>(
+                str, res, local_time_zone, to_scale, params);
+    }
 
     static inline bool from_string_non_strict_mode(const StringRef& str,
                                                    DateV2Value<DateTimeV2ValueType>& res,
@@ -192,15 +199,22 @@ struct CastToDatetimeV2 {
                                                    uint32_t to_scale, CastParameters& params) {
         return CastToDatetimeV2::from_string_strict_mode<false>(str, res, local_time_zone, to_scale,
                                                                 params) ||
-               CastToDatetimeV2::from_string_non_strict_mode_impl(str, res, local_time_zone,
-                                                                  to_scale, params);
+               CastToDatetimeV2::from_string_non_strict_mode_internal<
+                       DataTimeCastEnumType::DATE_TIME>(str, res, local_time_zone, to_scale,
+                                                       params);
     }
 
-    template <DataTimeCastEnumType type = DataTimeCastEnumType::DATE_TIME>
-    static inline bool from_string_non_strict_mode_impl(const StringRef& str,
+private:
+    template <bool IsStrict, DataTimeCastEnumType type>
+    static inline bool from_string_strict_mode_internal(const StringRef& str,
                                                         DateV2Value<DateTimeV2ValueType>& res,
                                                         const cctz::time_zone* local_time_zone,
                                                         uint32_t to_scale, CastParameters& params);
+
+    template <DataTimeCastEnumType type>
+    static inline bool from_string_non_strict_mode_internal(
+            const StringRef& str, DateV2Value<DateTimeV2ValueType>& res,
+            const cctz::time_zone* local_time_zone, uint32_t to_scale, CastParameters& params);
 };
 
 template <bool IsStrict, typename T>
@@ -324,7 +338,7 @@ inline bool CastToDatetimeV2::from_integer(T input, DateV2Value<DateTimeV2ValueT
 <whitespace>     ::= " " | "\t" | "\n" | "\r" | "\v" | "\f"
 */
 template <bool IsStrict, DataTimeCastEnumType type>
-inline bool CastToDatetimeV2::from_string_strict_mode(const StringRef& str,
+inline bool CastToDatetimeV2::from_string_strict_mode_internal(const StringRef& str,
                                                       DateV2Value<DateTimeV2ValueType>& res,
                                                       const cctz::time_zone* local_time_zone,
                                                       uint32_t to_scale, CastParameters& params) {
@@ -374,7 +388,7 @@ inline bool CastToDatetimeV2::from_string_strict_mode(const StringRef& str,
         has_second = true;
         if (ptr == end) {
             // no fraction or timezone part, just return.
-            goto NO_TIMEZHONE_PART;
+            goto POST_PROCESS;
         }
         goto FRAC;
     }
@@ -481,7 +495,7 @@ inline bool CastToDatetimeV2::from_string_strict_mode(const StringRef& str,
         res.unchecked_set_time_unit<TimeUnit::MINUTE>(0);
         res.unchecked_set_time_unit<TimeUnit::SECOND>(0);
         res.unchecked_set_time_unit<TimeUnit::MICROSECOND>(0);
-        goto NO_TIMEZHONE_PART;
+        goto POST_PROCESS;
     }
 
     SET_PARAMS_RET_FALSE_IFN(consume_one_delimiter(ptr, end),
@@ -497,7 +511,7 @@ inline bool CastToDatetimeV2::from_string_strict_mode(const StringRef& str,
                              part[0]);
     if (ptr == end) {
         // no minute part, just return.
-        goto NO_TIMEZHONE_PART;
+        goto POST_PROCESS;
     }
     if (*ptr == ':') {
         // with hour:minute:second
@@ -670,7 +684,7 @@ FRAC:
         return true;
     }
 
-NO_TIMEZHONE_PART:
+POST_PROCESS:
     if constexpr (type == DataTimeCastEnumType::TIMESTAMP_TZ) {
         // use local time zone to convert to UTC
         SET_PARAMS_RET_FALSE_IFN(local_time_zone != nullptr,
@@ -736,7 +750,7 @@ NO_TIMEZHONE_PART:
 */
 
 template <DataTimeCastEnumType type>
-inline bool CastToDatetimeV2::from_string_non_strict_mode_impl(
+inline bool CastToDatetimeV2::from_string_non_strict_mode_internal(
         const StringRef& str, DateV2Value<DateTimeV2ValueType>& res,
         const cctz::time_zone* local_time_zone, uint32_t to_scale, CastParameters& params) {
     constexpr bool IsStrict = false;
@@ -791,7 +805,7 @@ inline bool CastToDatetimeV2::from_string_non_strict_mode_impl(
         res.unchecked_set_time_unit<TimeUnit::MINUTE>(0);
         res.unchecked_set_time_unit<TimeUnit::SECOND>(0);
         res.unchecked_set_time_unit<TimeUnit::MICROSECOND>(0);
-        goto NO_TIMEZHONE_PART;
+        goto POST_PROCESS;
     }
 
     PROPAGATE_FALSE(consume_one_delimiter(ptr, end));
@@ -957,7 +971,7 @@ inline bool CastToDatetimeV2::from_string_non_strict_mode_impl(
                              "invalid datetime string '{}', extra characters after parsing",
                              std::string {ptr, end});
 
-NO_TIMEZHONE_PART:
+POST_PROCESS:
     if constexpr (type == DataTimeCastEnumType::TIMESTAMP_TZ) {
         // use local time zone to convert to UTC
         SET_PARAMS_RET_FALSE_IFN(local_time_zone != nullptr,

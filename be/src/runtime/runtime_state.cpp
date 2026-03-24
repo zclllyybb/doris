@@ -50,6 +50,7 @@
 #include "storage/storage_engine.h"
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 
 namespace doris {
 #include "common/compile_check_begin.h"
@@ -204,11 +205,14 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     } else if (!query_globals.now_string.empty()) {
         _timezone = TimezoneUtils::default_time_zone;
         VecDateTimeValue dt;
-        dt.from_date_str(query_globals.now_string.c_str(), query_globals.now_string.size());
+        CastParameters params;
+        DORIS_CHECK((CastToDateOrDatetime::from_string_strict_mode<true, true>(
+                {query_globals.now_string.c_str(), query_globals.now_string.size()}, dt, nullptr,
+                params)));
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
         _timestamp_ms = timestamp * 1000;
-        _nano_seconds = 0;
+         _nano_seconds = 0;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;

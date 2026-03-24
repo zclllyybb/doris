@@ -1131,10 +1131,10 @@ struct FieldTypeTraits<FieldType::OLAP_FIELD_TYPE_TIMESTAMPTZ>
         : public BaseFieldTypeTraits<FieldType::OLAP_FIELD_TYPE_TIMESTAMPTZ> {
     static Status from_string(void* buf, const std::string& scan_key, const int precision,
                               const int scale) {
-        CastParameters params;
+        CastParameters params {.status = Status::OK(), .is_strict = true};
         TimestampTzValue value;
         auto tz = cctz::utc_time_zone();
-        if (!CastToTimstampTz::from_string(StringRef(scan_key), value, params, &tz, 6)) {
+        if (!CastToTimestampTz::from_string(StringRef(scan_key), value, params, &tz, 6)) {
             return Status::Error<ErrorCode::INVALID_ARGUMENT>("parse timestamptz error, value: {}",
                                                               scan_key);
         }

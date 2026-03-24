@@ -228,7 +228,9 @@ Status DataTypeDateSerDe<T>::_read_column_from_arrow(IColumn& column,
         for (auto value_i = start; value_i < end; ++value_i) {
             auto val_str = concrete_array->GetString(value_i);
             VecDateTimeValue v;
-            v.from_date_str(val_str.c_str(), val_str.length(), ctz);
+            CastParameters params;
+            CastToDateOrDatetime::from_string_non_strict_mode<true>(
+                    {val_str.c_str(), val_str.length()}, v, &ctz, params);
             if constexpr (is_date) {
                 v.cast_to_date();
             }

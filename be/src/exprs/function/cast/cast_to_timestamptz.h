@@ -30,18 +30,13 @@
 
 namespace doris {
 
-struct CastToTimstampTz {
+struct CastToTimestampTz {
     static inline bool from_string(const StringRef& from, TimestampTzValue& to,
                                    CastParameters& params, const cctz::time_zone* local_time_zone,
-                                   uint32_t to_scale);
+                                   uint32_t to_scale) {
+        return to.from_string(from, local_time_zone, params, to_scale);
+    }
 };
-
-inline bool CastToTimstampTz::from_string(const StringRef& from, TimestampTzValue& to,
-                                          CastParameters& params,
-                                          const cctz::time_zone* local_time_zone,
-                                          uint32_t to_scale) {
-    return to.from_string(from, local_time_zone, params, to_scale);
-}
 
 template <CastModeType Mode>
 class CastToImpl<Mode, DataTypeString, DataTypeTimeStampTz> : public CastToBase {

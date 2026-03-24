@@ -86,6 +86,7 @@
 #include "information_schema/schema_workload_sched_policy_scanner.h"
 #include "runtime/fragment_mgr.h"
 #include "util/string_util.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 
 namespace doris {
 class ObjectPool;
@@ -482,7 +483,9 @@ Status SchemaScanner::insert_block_column(TCell cell, int col_index, Block* bloc
     case TYPE_DATETIME: {
         std::vector<void*> datas(1);
         VecDateTimeValue src[1];
-        src[0].from_date_str(cell.stringVal.data(), cell.stringVal.size());
+        CastParameters params;
+        CastToDateOrDatetime::from_string_non_strict_mode<true>(
+                {cell.stringVal.data(), cell.stringVal.size()}, src[0], nullptr, params);
         datas[0] = src;
         auto data = datas[0];
         reinterpret_cast<ColumnDateTime*>(col_ptr)->insert_data(reinterpret_cast<char*>(data), 0);

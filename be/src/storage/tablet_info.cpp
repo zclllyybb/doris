@@ -51,6 +51,9 @@
 #include "util/string_util.h"
 // NOLINTNEXTLINE(unused-includes)
 #include "core/value/vdatetime_value.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 #include "exprs/function/cast/cast_to_timestamptz.h"
 #include "exprs/vexpr_context.h" // IWYU pragma: keep
 #include "exprs/vliteral.h"
@@ -566,8 +569,10 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
                 DataTypeFactory::instance().create_data_type(t_expr.type)->get_primitive_type();
         if (primitive_type == TYPE_DATEV2) {
             DateV2Value<DateV2ValueType> dt;
-            if (!dt.from_date_str(t_expr.date_literal.value.c_str(),
-                                  t_expr.date_literal.value.size())) {
+            CastParameters params;
+            if (!CastToDateV2::from_string_strict_mode<true>(
+                        {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, dt,
+                        nullptr, params)) {
                 std::stringstream ss;
                 ss << "invalid date literal in partition column, date=" << t_expr.date_literal;
                 return Status::InternalError(ss.str());
@@ -577,8 +582,10 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
             DateV2Value<DateTimeV2ValueType> dt;
             const int32_t scale =
                     t_expr.type.types.empty() ? -1 : t_expr.type.types.front().scalar_type.scale;
-            if (!dt.from_date_str(t_expr.date_literal.value.c_str(),
-                                  t_expr.date_literal.value.size(), scale)) {
+            CastParameters params;
+            if (!CastToDatetimeV2::from_string_strict_mode<true>(
+                        {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, dt,
+                        nullptr, scale, params)) {
                 std::stringstream ss;
                 ss << "invalid date literal in partition column, date=" << t_expr.date_literal;
                 return Status::InternalError(ss.str());
@@ -589,7 +596,8 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
             CastParameters params {.status = Status::OK(), .is_strict = true};
             const int32_t scale =
                     t_expr.type.types.empty() ? -1 : t_expr.type.types.front().scalar_type.scale;
-            if (!CastToTimstampTz::from_string(
+            // FE pass the value with timezone info(using legacy planner), so no `local_time_zone` here is ok.
+            if (!CastToTimestampTz::from_string(
                         {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, res,
                         params, nullptr, scale)) [[unlikely]] {
                 std::stringstream ss;
@@ -602,8 +610,10 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
         } else {
             // TYPE_DATE (DATEV1) or TYPE_DATETIME (DATETIMEV1)
             VecDateTimeValue dt;
-            if (!dt.from_date_str(t_expr.date_literal.value.c_str(),
-                                  t_expr.date_literal.value.size())) {
+            CastParameters params;
+            if (!CastToDateOrDatetime::from_string_strict_mode<true, true>(
+                        {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, dt,
+                        nullptr, params)) {
                 std::stringstream ss;
                 ss << "invalid date literal in partition column, date=" << t_expr.date_literal;
                 return Status::InternalError(ss.str());

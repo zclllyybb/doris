@@ -59,6 +59,7 @@
 #include "storage/tablet_info.h"
 #include "storage/task/engine_publish_version_task.h"
 #include "storage/txn/txn_manager.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 
 namespace doris {
 class OlapMeta;
@@ -198,7 +199,11 @@ static void generate_data(Block* block, int8_t k1, int16_t k2, int32_t seq) {
     columns[1]->insert_data((const char*)&c2, sizeof(c2));
 
     VecDateTimeValue c3;
-    c3.from_date_str("2020-07-16 19:39:43", 19);
+    {
+        CastParameters p;
+        CastToDateOrDatetime::from_string_strict_mode<true, true>({"2020-07-16 19:39:43", 19}, c3,
+                                                                  nullptr, p);
+    }
     int64_t c3_int = c3.to_int64();
     columns[2]->insert_data((const char*)&c3_int, sizeof(c3));
 
