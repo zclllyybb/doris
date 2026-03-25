@@ -40,6 +40,8 @@
 #include "core/data_type/define_primitive_type.h"
 #include "core/value/decimalv2_value.h"
 #include "core/value/vdatetime_value.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "gtest/gtest_pred_impl.h"
 #include "io/fs/local_file_system.h"
 #include "runtime/descriptor_helper.h"
@@ -59,8 +61,6 @@
 #include "storage/tablet_info.h"
 #include "storage/task/engine_publish_version_task.h"
 #include "storage/txn/txn_manager.h"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 
 namespace doris {
 class OlapMeta;
@@ -456,8 +456,9 @@ static void generate_data(Block* block, int8_t k1, int16_t k2, int32_t seq) {
     VecDateTimeValue c3;
     {
         CastParameters p;
-        CastToDateOrDatetime::from_string_strict_mode<true, true>({"2020-07-16 19:39:43", 19}, c3,
-                                                                  nullptr, p);
+        CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                      DatelikeTargetType::DATE_TIME>(
+                {"2020-07-16 19:39:43", 19}, c3, nullptr, p);
     }
     int64_t c3_int = c3.to_int64();
     columns[2]->insert_data((const char*)&c3_int, sizeof(c3));
@@ -587,8 +588,9 @@ TEST_F(TestDeltaWriter, vec_write) {
         VecDateTimeValue k6;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2048-11-10", 10}, k6,
-                                                                      nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2048-11-10", 10}, k6, nullptr, p);
         }
         auto k6_int = k6.to_int64();
         columns[5]->insert_data((const char*)&k6_int, sizeof(k6_int));
@@ -596,8 +598,9 @@ TEST_F(TestDeltaWriter, vec_write) {
         VecDateTimeValue k7;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2636-08-16 19:39:43", 19},
-                                                                      k7, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2636-08-16 19:39:43", 19}, k7, nullptr, p);
         }
         auto k7_int = k7.to_int64();
         columns[6]->insert_data((const char*)&k7_int, sizeof(k7_int));
@@ -612,7 +615,8 @@ TEST_F(TestDeltaWriter, vec_write) {
         DateV2Value<DateV2ValueType> date_v2;
         {
             CastParameters p;
-            CastToDateV2::from_string_strict_mode<true>({"2048-11-10", 10}, date_v2, nullptr, p);
+            CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>({"2048-11-10", 10},
+                                                                             date_v2, nullptr, p);
         }
         auto date_v2_int = date_v2.to_date_int_val();
         columns[10]->insert_data((const char*)&date_v2_int, sizeof(date_v2_int));
@@ -635,8 +639,9 @@ TEST_F(TestDeltaWriter, vec_write) {
         VecDateTimeValue v6;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2048-11-10", 10}, v6,
-                                                                      nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2048-11-10", 10}, v6, nullptr, p);
         }
         auto v6_int = v6.to_int64();
         columns[16]->insert_data((const char*)&v6_int, sizeof(v6_int));
@@ -644,8 +649,9 @@ TEST_F(TestDeltaWriter, vec_write) {
         VecDateTimeValue v7;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2636-08-16 19:39:43", 19},
-                                                                      v7, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2636-08-16 19:39:43", 19}, v7, nullptr, p);
         }
         auto v7_int = v7.to_int64();
         columns[17]->insert_data((const char*)&v7_int, sizeof(v7_int));
@@ -658,7 +664,8 @@ TEST_F(TestDeltaWriter, vec_write) {
 
         {
             CastParameters p;
-            CastToDateV2::from_string_strict_mode<true>({"2048-11-10", 10}, date_v2, nullptr, p);
+            CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>({"2048-11-10", 10},
+                                                                             date_v2, nullptr, p);
         }
         date_v2_int = date_v2.to_date_int_val();
         columns[21]->insert_data((const char*)&date_v2_int, sizeof(date_v2_int));

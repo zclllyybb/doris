@@ -131,7 +131,8 @@ bool read_ipv6_text_impl(T& x, const StringRef& buf) {
 
 bool read_datetime_text_impl(VecDateTimeValue& x, const StringRef& buf);
 
-bool read_datetime_text_impl(Int64& x, const StringRef& buf, const cctz::time_zone& local_time_zone);
+bool read_datetime_text_impl(Int64& x, const StringRef& buf,
+                             const cctz::time_zone& local_time_zone);
 
 bool read_date_v2_text_impl(DateV2Value<DateV2ValueType>& x, const StringRef& buf);
 

@@ -58,8 +58,8 @@
 #include "core/value/decimalv2_value.h"
 #include "core/value/vdatetime_value.h"
 #include "exprs/aggregate/aggregate_function.h"
-#include "gtest/gtest_pred_impl.h"
 #include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
+#include "gtest/gtest_pred_impl.h"
 
 namespace doris {
 
@@ -70,12 +70,14 @@ ArrowCppType string_to_arrow_datetime(std::shared_ptr<ArrowType> type, const std
         CastParameters p;
         if constexpr (std::is_same_v<ArrowType, arrow::Date32Type>) {
             tv.set_type(TimeType::TIME_DATE);
-            CastToDateOrDatetime::from_string_strict_mode<true, false>(
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE>(
                     {value.c_str(), value.size()}, tv, nullptr, p);
             tv.cast_to_date();
         } else {
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({value.c_str(), value.size()},
-                                                                      tv, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {value.c_str(), value.size()}, tv, nullptr, p);
         }
     }
     int64_t unix_seconds = 0;
@@ -205,11 +207,13 @@ void test_datetime(std::shared_ptr<ArrowType> type, const std::vector<std::strin
         {
             CastParameters p;
             if constexpr (std::is_same_v<ArrowType, arrow::Date32Type>) {
-                CastToDateOrDatetime::from_string_strict_mode<true, false>(
+                CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                              DatelikeTargetType::DATE>(
                         {value.c_str(), value.size()}, tv, nullptr, p);
                 tv.cast_to_date();
             } else {
-                CastToDateOrDatetime::from_string_strict_mode<true, true>(
+                CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                              DatelikeTargetType::DATE_TIME>(
                         {value.c_str(), value.size()}, tv, nullptr, p);
             }
         }

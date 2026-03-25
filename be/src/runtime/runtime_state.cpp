@@ -39,6 +39,7 @@
 #include "exec/operator/operator.h"
 #include "exec/pipeline/pipeline_task.h"
 #include "exec/runtime_filter/runtime_filter_mgr.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 #include "io/fs/s3_file_system.h"
 #include "load/load_path_mgr.h"
 #include "runtime/exec_env.h"
@@ -50,7 +51,6 @@
 #include "storage/storage_engine.h"
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 
 namespace doris {
 #include "common/compile_check_begin.h"
@@ -206,13 +206,14 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
         _timezone = TimezoneUtils::default_time_zone;
         VecDateTimeValue dt;
         CastParameters params;
-        DORIS_CHECK((CastToDateOrDatetime::from_string_strict_mode<true, true>(
+        DORIS_CHECK((CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                                   DatelikeTargetType::DATE_TIME>(
                 {query_globals.now_string.c_str(), query_globals.now_string.size()}, dt, nullptr,
                 params)));
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
         _timestamp_ms = timestamp * 1000;
-         _nano_seconds = 0;
+        _nano_seconds = 0;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;

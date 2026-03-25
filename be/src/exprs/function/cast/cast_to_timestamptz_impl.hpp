@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/value/timestamptz_value.h"
 #include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 namespace doris {
@@ -32,41 +33,49 @@ namespace doris {
  *   DATE_TIME keeps the time as-is.
  */
 struct CastToTimestampTz {
-    template <bool IsStrict>
-    static inline bool from_string_strict_mode(const StringRef& str,
-                                               DateV2Value<DateTimeV2ValueType>& res,
+    template <DatelikeParseMode ParseMode>
+    static inline bool from_string_strict_mode(const StringRef& str, TimestampTzValue& res,
+                                               CastParameters& params,
                                                const cctz::time_zone* local_time_zone,
-                                               uint32_t to_scale, CastParameters& params) {
-        return CastToDatetimeV2::from_string_strict_mode_internal<
-                IsStrict, DataTimeCastEnumType::TIMESTAMP_TZ>(str, res, local_time_zone, to_scale,
-                                                              params);
+                                               uint32_t to_scale) {
+        if (!CastToDatetimeV2::from_string_strict_mode_internal<ParseMode,
+                                                                DataTimeCastEnumType::TIMESTAMP_TZ>(
+                    str, res.mutable_utc_dt(), local_time_zone, to_scale, params)) {
+            return false;
+        }
+        return true;
     }
 
-    static inline bool from_string_non_strict_mode_impl(const StringRef& str,
-                                                        DateV2Value<DateTimeV2ValueType>& res,
+    static inline bool from_string_non_strict_mode_impl(const StringRef& str, TimestampTzValue& res,
+                                                        CastParameters& params,
                                                         const cctz::time_zone* local_time_zone,
-                                                        uint32_t to_scale,
-                                                        CastParameters& params) {
-        return CastToDatetimeV2::from_string_non_strict_mode_internal<
-                DataTimeCastEnumType::TIMESTAMP_TZ>(str, res, local_time_zone, to_scale, params);
+                                                        uint32_t to_scale) {
+        if (!CastToDatetimeV2::from_string_non_strict_mode_internal<
+                    DataTimeCastEnumType::TIMESTAMP_TZ>(str, res.mutable_utc_dt(), local_time_zone,
+                                                        to_scale, params)) {
+            return false;
+        }
+        return true;
     }
 
-    static inline bool from_string_non_strict_mode(const StringRef& str,
-                                                   DateV2Value<DateTimeV2ValueType>& res,
+    static inline bool from_string_non_strict_mode(const StringRef& str, TimestampTzValue& res,
+                                                   CastParameters& params,
                                                    const cctz::time_zone* local_time_zone,
-                                                   uint32_t to_scale, CastParameters& params) {
-        return from_string_strict_mode<false>(str, res, local_time_zone, to_scale, params) ||
-               from_string_non_strict_mode_impl(str, res, local_time_zone, to_scale, params);
+                                                   uint32_t to_scale) {
+        return from_string_strict_mode<DatelikeParseMode::NON_STRICT>(str, res, params,
+                                                                      local_time_zone, to_scale) ||
+               from_string_non_strict_mode_impl(str, res, params, local_time_zone, to_scale);
     }
 
     // Auto dispatch based on params.is_strict
-    static inline bool from_string(const StringRef& str, DateV2Value<DateTimeV2ValueType>& res,
-                                   const cctz::time_zone* local_time_zone, uint32_t to_scale,
-                                   CastParameters& params) {
+    static inline bool from_string(const StringRef& str, TimestampTzValue& res,
+                                   CastParameters& params, const cctz::time_zone* local_time_zone,
+                                   uint32_t to_scale) {
         if (params.is_strict) {
-            return from_string_strict_mode<true>(str, res, local_time_zone, to_scale, params);
+            return from_string_strict_mode<DatelikeParseMode::STRICT>(str, res, params,
+                                                                      local_time_zone, to_scale);
         } else {
-            return from_string_non_strict_mode(str, res, local_time_zone, to_scale, params);
+            return from_string_non_strict_mode(str, res, params, local_time_zone, to_scale);
         }
     }
 };

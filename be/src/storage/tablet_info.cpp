@@ -52,8 +52,8 @@
 // NOLINTNEXTLINE(unused-includes)
 #include "core/value/vdatetime_value.h"
 #include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "exprs/function/cast/cast_to_timestamptz.h"
 #include "exprs/vexpr_context.h" // IWYU pragma: keep
 #include "exprs/vliteral.h"
@@ -562,7 +562,6 @@ bool VOlapTablePartitionParam::_part_contains(VOlapTablePartition* part,
 // NOLINTBEGIN(readability-function-size)
 static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key, uint16_t pos) {
     auto column = std::move(*part_key->first->get_by_position(pos).column).mutate();
-    //TODO: use assert_cast before insert_data
     switch (t_expr.node_type) {
     case TExprNodeType::DATE_LITERAL: {
         auto primitive_type =
@@ -570,7 +569,7 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
         if (primitive_type == TYPE_DATEV2) {
             DateV2Value<DateV2ValueType> dt;
             CastParameters params;
-            if (!CastToDateV2::from_string_strict_mode<true>(
+            if (!CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
                         {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, dt,
                         nullptr, params)) {
                 std::stringstream ss;
@@ -583,7 +582,7 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
             const int32_t scale =
                     t_expr.type.types.empty() ? -1 : t_expr.type.types.front().scalar_type.scale;
             CastParameters params;
-            if (!CastToDatetimeV2::from_string_strict_mode<true>(
+            if (!CastToDatetimeV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
                         {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, dt,
                         nullptr, scale, params)) {
                 std::stringstream ss;
@@ -596,7 +595,6 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
             CastParameters params {.status = Status::OK(), .is_strict = true};
             const int32_t scale =
                     t_expr.type.types.empty() ? -1 : t_expr.type.types.front().scalar_type.scale;
-            // FE pass the value with timezone info(using legacy planner), so no `local_time_zone` here is ok.
             if (!CastToTimestampTz::from_string(
                         {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, res,
                         params, nullptr, scale)) [[unlikely]] {
@@ -604,22 +602,20 @@ static Status _create_partition_key(const TExprNode& t_expr, BlockRow* part_key,
                 ss << "invalid timestamptz literal in partition column, value="
                    << t_expr.date_literal;
                 return Status::InternalError(ss.str());
-            } else {
-                column->insert_data(reinterpret_cast<const char*>(&res), 0);
             }
+            column->insert_data(reinterpret_cast<const char*>(&res), 0);
         } else {
-            // TYPE_DATE (DATEV1) or TYPE_DATETIME (DATETIMEV1)
             VecDateTimeValue dt;
             CastParameters params;
-            if (!CastToDateOrDatetime::from_string_strict_mode<true, true>(
+            if (!CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                               DatelikeTargetType::DATE_TIME>(
                         {t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size()}, dt,
                         nullptr, params)) {
                 std::stringstream ss;
                 ss << "invalid date literal in partition column, date=" << t_expr.date_literal;
                 return Status::InternalError(ss.str());
             }
-            if (DataTypeFactory::instance().create_data_type(t_expr.type)->get_primitive_type() ==
-                TYPE_DATE) {
+            if (primitive_type == TYPE_DATE) {
                 dt.cast_to_date();
             }
             column->insert_data(reinterpret_cast<const char*>(&dt), 0);

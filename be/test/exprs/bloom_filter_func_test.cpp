@@ -30,10 +30,10 @@
 #include "core/data_type/primitive_type.h"
 #include "core/value/vdatetime_value.h"
 #include "exprs/create_predicate_function.h"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "gtest/gtest.h"
 #include "testutil/column_helper.h"
 #include "util/url_coding.h"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 
 namespace doris {
 class BloomFilterFuncTest : public testing::Test {
@@ -94,8 +94,8 @@ TEST_F(BloomFilterFuncTest, FixedLenToUInt32) {
         DateV2Value<DateV2ValueType> date;
         {
             CastParameters p;
-            CastToDateV2::from_string_strict_mode<true>({"2021-01-01", strlen("2021-01-01")}, date,
-                                                        nullptr, p);
+            CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
+                    {"2021-01-01", strlen("2021-01-01")}, date, nullptr, p);
         }
         auto min = binary_cast<uint32_t, DateV2Value<DateV2ValueType>>(MIN_DATE_V2);
         auto max = binary_cast<uint32_t, DateV2Value<DateV2ValueType>>(MAX_DATE_V2);

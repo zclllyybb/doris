@@ -42,6 +42,7 @@
 #include "core/types.h"
 #include "core/value/hll.h"
 #include "exec/pipeline/dependency.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 #include "information_schema/schema_active_queries_scanner.h"
 #include "information_schema/schema_authentication_integrations_scanner.h"
 #include "information_schema/schema_backend_active_tasks.h"
@@ -86,7 +87,6 @@
 #include "information_schema/schema_workload_sched_policy_scanner.h"
 #include "runtime/fragment_mgr.h"
 #include "util/string_util.h"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 
 namespace doris {
 class ObjectPool;
@@ -484,7 +484,7 @@ Status SchemaScanner::insert_block_column(TCell cell, int col_index, Block* bloc
         std::vector<void*> datas(1);
         VecDateTimeValue src[1];
         CastParameters params;
-        CastToDateOrDatetime::from_string_non_strict_mode<true>(
+        CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE_TIME>(
                 {cell.stringVal.data(), cell.stringVal.size()}, src[0], nullptr, params);
         datas[0] = src;
         auto data = datas[0];

@@ -343,7 +343,7 @@ Status RuntimeFilterWrapper::_assign(const PInFilter& in_filter, bool contain_nu
             const auto& string_val_ref = column.stringval();
             VecDateTimeValue datetime_val;
             CastParameters params;
-            CastToDateOrDatetime::from_string_non_strict_mode<true>(
+            CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE_TIME>(
                     {string_val_ref.c_str(), string_val_ref.length()}, datetime_val, nullptr,
                     params);
             set->insert(&datetime_val);
@@ -535,9 +535,9 @@ Status RuntimeFilterWrapper::_assign(const PMinMaxFilter& minmax_filter, bool co
         VecDateTimeValue min_val;
         VecDateTimeValue max_val;
         CastParameters params;
-        CastToDateOrDatetime::from_string_non_strict_mode<true>(
+        CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE_TIME>(
                 {min_val_ref.c_str(), min_val_ref.length()}, min_val, nullptr, params);
-        CastToDateOrDatetime::from_string_non_strict_mode<true>(
+        CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE_TIME>(
                 {max_val_ref.c_str(), max_val_ref.length()}, max_val, nullptr, params);
         return _minmax_func->assign(&min_val, &max_val);
     }

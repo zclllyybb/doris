@@ -26,9 +26,9 @@
 #include "core/data_type/data_type_factory.hpp"
 #include "core/data_type/define_primitive_type.h"
 #include "core/string_ref.h"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 #include "information_schema/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 namespace doris {
 #include "common/compile_check_begin.h"
@@ -142,8 +142,7 @@ Status SchemaProcessListScanner::_fill_block_impl(Block* block) {
                 auto* dv = reinterpret_cast<DateV2Value<DateTimeV2ValueType>*>(&int_vals[row_idx]);
                 CastParameters params;
                 if (!CastToDatetimeV2::from_string_non_strict_mode(
-                            {column_value.data(), column_value.size()}, *dv, nullptr, -1,
-                            params)) {
+                            {column_value.data(), column_value.size()}, *dv, nullptr, -1, params)) {
                     return Status::InternalError(
                             "process list meet invalid data, column={}, data={}, reason={}",
                             _s_processlist_columns[col_idx].name, column_value);

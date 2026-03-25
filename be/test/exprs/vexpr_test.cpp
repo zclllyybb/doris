@@ -46,6 +46,9 @@
 #include "core/value/timestamptz_value.h"
 #include "core/value/vdatetime_value.h"
 #include "exec/common/util.hpp"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "exprs/vexpr_context.h"
 #include "exprs/vliteral.h"
 #include "gtest/gtest_pred_impl.h"
@@ -54,9 +57,6 @@
 #include "runtime/runtime_state.h"
 #include "testutil/desc_tbl_builder.h"
 #include "util/timezone_utils.h"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
-#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 TEST(TEST_VEXPR, ABSTEST) {
     doris::ObjectPool object_pool;
@@ -529,8 +529,9 @@ TEST(TEST_VEXPR, LITERALTEST) {
         const char* date = "20210407000000";
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({date, strlen(date)},
-                                                                      data_time_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {date, strlen(date)}, data_time_value, nullptr, p);
         }
         std::cout << data_time_value.type() << std::endl;
         VLiteral literal(create_literal<TYPE_DATETIME, std::string>(std::string(date)));
@@ -610,8 +611,9 @@ TEST(TEST_VEXPR, LITERALTEST) {
         const char* date = "20210407";
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, false>({date, strlen(date)},
-                                                                       date_time_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE>(
+                    {date, strlen(date)}, date_time_value, nullptr, p);
         }
         __int64_t dt;
         memcpy(&dt, &date_time_value, sizeof(__int64_t));
@@ -632,8 +634,8 @@ TEST(TEST_VEXPR, LITERALTEST) {
         const char* date = "20210407";
         {
             CastParameters p;
-            CastToDateV2::from_string_strict_mode<true>({date, strlen(date)}, data_time_value,
-                                                        nullptr, p);
+            CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
+                    {date, strlen(date)}, data_time_value, nullptr, p);
         }
         uint32_t dt;
         memcpy(&dt, &data_time_value, sizeof(uint32_t));
@@ -656,8 +658,8 @@ TEST(TEST_VEXPR, LITERALTEST) {
         const char* date = "00000000";
         {
             CastParameters p;
-            EXPECT_EQ(CastToDateV2::from_string_strict_mode<true>({date, strlen(date)},
-                                                                  data_time_value, nullptr, p),
+            EXPECT_EQ(CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
+                              {date, strlen(date)}, data_time_value, nullptr, p),
                       true);
         }
 
@@ -665,20 +667,25 @@ TEST(TEST_VEXPR, LITERALTEST) {
         const char* date1 = "00000101";
         {
             CastParameters p;
-            EXPECT_EQ(CastToDateV2::from_string_strict_mode<true>({date1, strlen(date1)},
-                                                                  data_time_value1, nullptr, p),
+            EXPECT_EQ(CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
+                              {date1, strlen(date1)}, data_time_value1, nullptr, p),
                       true);
         }
         EXPECT_EQ(data_time_value.to_int64(), data_time_value1.to_int64());
 
-        { CastParameters p; EXPECT_EQ(CastToDateV2::from_string_non_strict_mode({date, strlen(date)}, data_time_value, nullptr, p), true); }
+        {
+            CastParameters p;
+            EXPECT_EQ(CastToDateV2::from_string_non_strict_mode({date, strlen(date)},
+                                                                data_time_value, nullptr, p),
+                      true);
+        }
     }
     {
         DateV2Value<DateTimeV2ValueType> data_time_value;
         const char* date = "00000000111111";
         {
             CastParameters p;
-            EXPECT_EQ(CastToDatetimeV2::from_string_strict_mode<true>(
+            EXPECT_EQ(CastToDatetimeV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
                               {date, strlen(date)}, data_time_value, nullptr, -1, p),
                       true);
         }
@@ -687,13 +694,18 @@ TEST(TEST_VEXPR, LITERALTEST) {
         const char* date1 = "00000101111111";
         {
             CastParameters p;
-            EXPECT_EQ(CastToDatetimeV2::from_string_strict_mode<true>(
+            EXPECT_EQ(CastToDatetimeV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
                               {date1, strlen(date1)}, data_time_value1, nullptr, -1, p),
                       true);
         }
         EXPECT_EQ(data_time_value.to_int64(), data_time_value1.to_int64());
 
-        { CastParameters p; EXPECT_EQ(CastToDatetimeV2::from_string_non_strict_mode({date, strlen(date)}, data_time_value, nullptr, -1, p), true); }
+        {
+            CastParameters p;
+            EXPECT_EQ(CastToDatetimeV2::from_string_non_strict_mode(
+                              {date, strlen(date)}, data_time_value, nullptr, -1, p),
+                      true);
+        }
     }
     // jsonb
     {

@@ -19,10 +19,10 @@
 
 #include "core/data_type/data_type_factory.hpp"
 #include "exec/common/stringop_substring.h"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "exprs/function/function_string.h"
 #include "util/bit_util.h"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
-#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 namespace doris {
 
@@ -52,8 +52,8 @@ public:
         static bool initialized = false;
         if (!initialized) {
             CastParameters params;
-            DORIS_CHECK((CastToDateV2::from_string_strict_mode<true>({"1970-01-01 00:00:00", 19},
-                                                                     epoch_date, nullptr, params)));
+            DORIS_CHECK((CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
+                    {"1970-01-01 00:00:00", 19}, epoch_date, nullptr, params)));
             initialized = true;
         }
         return epoch_date;
@@ -64,7 +64,7 @@ public:
         static bool initialized = false;
         if (!initialized) {
             CastParameters params;
-            DORIS_CHECK((CastToDatetimeV2::from_string_strict_mode<true>(
+            DORIS_CHECK((CastToDatetimeV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
                     {"1970-01-01 00:00:00", 19}, epoch_datetime, nullptr, -1, params)));
             initialized = true;
         }

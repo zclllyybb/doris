@@ -22,20 +22,22 @@
 
 #include "core/binary_cast.hpp"
 #include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 
 namespace doris {
 bool read_date_text_impl(VecDateTimeValue& x, const StringRef& buf) {
     CastParameters params;
-    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<false>(buf, x, nullptr, params);
+    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE>(
+            buf, x, nullptr, params);
     x.cast_to_date();
     return ans;
 }
 
 bool read_datetime_text_impl(VecDateTimeValue& x, const StringRef& buf) {
     CastParameters params;
-    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<true>(buf, x, nullptr, params);
+    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE_TIME>(
+            buf, x, nullptr, params);
     x.to_datetime();
     return ans;
 }
@@ -43,19 +45,19 @@ bool read_datetime_text_impl(VecDateTimeValue& x, const StringRef& buf) {
 bool read_date_text_impl(Int64& x, const StringRef& buf, const cctz::time_zone& local_time_zone) {
     auto dv = binary_cast<Int64, VecDateTimeValue>(x);
     CastParameters params;
-    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<false>(buf, dv, &local_time_zone,
-                                                                        params);
+    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE>(
+            buf, dv, &local_time_zone, params);
     dv.cast_to_date();
     x = binary_cast<VecDateTimeValue, Int64>(dv);
     return ans;
 }
 
 bool read_datetime_text_impl(Int64& x, const StringRef& buf,
-                              const cctz::time_zone& local_time_zone) {
+                             const cctz::time_zone& local_time_zone) {
     auto dv = binary_cast<Int64, VecDateTimeValue>(x);
     CastParameters params;
-    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<true>(buf, dv, &local_time_zone,
-                                                                       params);
+    auto ans = CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE_TIME>(
+            buf, dv, &local_time_zone, params);
     dv.to_datetime();
     x = binary_cast<VecDateTimeValue, Int64>(dv);
     return ans;

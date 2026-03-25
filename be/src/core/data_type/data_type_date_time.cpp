@@ -53,7 +53,8 @@ MutableColumnPtr DataTypeDateTime::create_column() const {
 Field DataTypeDateTime::get_field(const TExprNode& node) const {
     VecDateTimeValue value;
     CastParameters params;
-    if (CastToDateOrDatetime::from_string_strict_mode<true, true>(
+    if (CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                      DatelikeTargetType::DATE_TIME>(
                 {node.date_literal.value.c_str(), node.date_literal.value.size()}, value, nullptr,
                 params)) {
         value.to_datetime();

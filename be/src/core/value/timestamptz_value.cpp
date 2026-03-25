@@ -26,7 +26,7 @@ const TimestampTzValue TimestampTzValue::FIRST_DAY =
 
 bool TimestampTzValue::from_string(const StringRef& str, const cctz::time_zone* local_time_zone,
                                    CastParameters& params, uint32_t to_scale) {
-    return CastToTimestampTz::from_string(str, _utc_dt, local_time_zone, to_scale, params);
+    return CastToTimestampTz::from_string(str, *this, params, local_time_zone, to_scale);
 }
 
 std::string TimestampTzValue::to_string(const cctz::time_zone& tz, int scale) const {

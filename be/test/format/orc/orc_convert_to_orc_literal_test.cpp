@@ -22,9 +22,9 @@
 #include "core/column/column_struct.h"
 #include "core/data_type/data_type_nullable.h"
 #include "core/types.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 #include "format/orc/vorc_reader.cpp"
 #include "orc/ColumnPrinter.hh"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
 
 namespace doris {
 class OrcReaderConvertToOrcLiteralTest : public ::testing::Test {
@@ -164,8 +164,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         VecDateTimeValue date_value;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2024-03-14", 10},
-                                                                      date_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2024-03-14", 10}, date_value, nullptr, p);
         }
         StringRef literal_data(reinterpret_cast<const char*>(&date_value), sizeof(date_value));
         auto orc_type_ptr = createPrimitiveType(orc::TypeKind::DATE);
@@ -180,8 +181,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         // Boundary date - minimum value
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"0001-01-01", 10},
-                                                                      date_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"0001-01-01", 10}, date_value, nullptr, p);
         }
         literal_data = StringRef(reinterpret_cast<const char*>(&date_value), sizeof(date_value));
         std::tie(success, literal) =
@@ -192,8 +194,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         // Boundary date - maximum value
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"9999-12-31", 10},
-                                                                      date_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"9999-12-31", 10}, date_value, nullptr, p);
         }
         literal_data = StringRef(reinterpret_cast<const char*>(&date_value), sizeof(date_value));
         std::tie(success, literal) =
@@ -208,8 +211,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         VecDateTimeValue datetime_value;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2024-03-14 15:30:45", 19},
-                                                                      datetime_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2024-03-14 15:30:45", 19}, datetime_value, nullptr, p);
         }
         StringRef literal_data(reinterpret_cast<const char*>(&datetime_value),
                                sizeof(datetime_value));
@@ -224,8 +228,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         // Midnight time
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2024-03-14 00:00:00", 19},
-                                                                      datetime_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2024-03-14 00:00:00", 19}, datetime_value, nullptr, p);
         }
         literal_data =
                 StringRef(reinterpret_cast<const char*>(&datetime_value), sizeof(datetime_value));
@@ -237,8 +242,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         // Leap year handling
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2024-02-29 12:00:00", 19},
-                                                                      datetime_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2024-02-29 12:00:00", 19}, datetime_value, nullptr, p);
         }
         literal_data =
                 StringRef(reinterpret_cast<const char*>(&datetime_value), sizeof(datetime_value));
@@ -274,8 +280,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         VecDateTimeValue date_value;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2024-03-14", 10},
-                                                                      date_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2024-03-14", 10}, date_value, nullptr, p);
         }
         StringRef literal_data(reinterpret_cast<const char*>(&date_value), sizeof(date_value));
         auto orc_type_ptr = createPrimitiveType(orc::TypeKind::TIMESTAMP);
@@ -386,8 +393,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         VecDateTimeValue date_value;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2024-03-14", 10},
-                                                                      date_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2024-03-14", 10}, date_value, nullptr, p);
         }
         StringRef literal_data(reinterpret_cast<const char*>(&date_value), sizeof(date_value));
 
@@ -491,8 +499,9 @@ TEST_F(OrcReaderConvertToOrcLiteralTest, ConvertTypesTest) {
         VecDateTimeValue datetime_value;
         {
             CastParameters p;
-            CastToDateOrDatetime::from_string_strict_mode<true, true>({"2024-03-14 15:30:45", 19},
-                                                                      datetime_value, nullptr, p);
+            CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                          DatelikeTargetType::DATE_TIME>(
+                    {"2024-03-14 15:30:45", 19}, datetime_value, nullptr, p);
         }
         StringRef literal_data(reinterpret_cast<const char*>(&datetime_value),
                                sizeof(datetime_value));

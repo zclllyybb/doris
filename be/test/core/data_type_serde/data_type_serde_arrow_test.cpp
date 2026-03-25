@@ -72,11 +72,11 @@
 #include "core/value/hll.h"
 #include "core/value/vdatetime_value.h"
 #include "exec/common/arrow_column_to_doris_column.h"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 #include "format/arrow/arrow_block_convertor.h"
 #include "format/arrow/arrow_row_batch.h"
 #include "runtime/descriptors.cpp"
 #include "util/string_parser.hpp"
-#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 namespace doris {
 
@@ -286,7 +286,7 @@ std::shared_ptr<Block> create_test_block(std::vector<PrimitiveType> cols, int ro
             TimezoneUtils::find_cctz_time_zone("UTC", ctz);
             {
                 CastParameters p;
-                EXPECT_TRUE(CastToDatetimeV2::from_string_strict_mode<true>(
+                EXPECT_TRUE(CastToDatetimeV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
                         {date_literal.c_str(), date_literal.size()}, value, &ctz, 3, p));
             }
             char to[64] = {};

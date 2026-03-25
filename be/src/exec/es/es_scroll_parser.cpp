@@ -43,15 +43,15 @@
 #include "core/value/decimalv2_value.h"
 #include "core/value/jsonb_value.h"
 #include "core/value/vdatetime_value.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "rapidjson/document.h"
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "runtime/descriptors.h"
 #include "util/string_parser.hpp"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
-#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 namespace doris {
 #include "common/compile_check_begin.h"
@@ -245,8 +245,9 @@ Status get_date_value_int(const rapidjson::Value& col, PrimitiveType type, bool 
                 // YYYY-MM-DD HH:MM:SS
                 CastParameters params;
                 if constexpr (is_datetime_v1) {
-                    success = CastToDateOrDatetime::from_string_non_strict_mode<true>(
-                            {str_date.c_str(), (size_t)str_length}, dt_val, nullptr, params);
+                    success = CastToDateOrDatetime::from_string_non_strict_mode<
+                            DatelikeTargetType::DATE_TIME>({str_date.c_str(), (size_t)str_length},
+                                                           dt_val, nullptr, params);
                 } else if constexpr (T == TYPE_DATEV2) {
                     success = CastToDateV2::from_string_non_strict_mode(
                             {str_date.c_str(), (size_t)str_length}, dt_val, nullptr, params);
@@ -267,8 +268,9 @@ Status get_date_value_int(const rapidjson::Value& col, PrimitiveType type, bool 
             // YYYY-MM-DD or others
             CastParameters params;
             if constexpr (is_datetime_v1) {
-                success = CastToDateOrDatetime::from_string_non_strict_mode<true>(
-                        {str_date.c_str(), (size_t)str_length}, dt_val, nullptr, params);
+                success = CastToDateOrDatetime::from_string_non_strict_mode<
+                        DatelikeTargetType::DATE_TIME>({str_date.c_str(), (size_t)str_length},
+                                                       dt_val, nullptr, params);
             } else if constexpr (T == TYPE_DATEV2) {
                 success = CastToDateV2::from_string_non_strict_mode(
                         {str_date.c_str(), (size_t)str_length}, dt_val, nullptr, params);

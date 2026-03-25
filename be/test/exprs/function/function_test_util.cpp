@@ -52,12 +52,12 @@
 #include "core/value/time_value.h"
 #include "core/value/vdatetime_value.h"
 #include "exprs/function/cast/cast_base.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "exprs/function/cast/cast_to_time_impl.hpp"
 #include "exprs/table_function/table_function.h"
 #include "runtime/runtime_state.h"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
-#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 namespace doris {
 
@@ -326,9 +326,16 @@ bool insert_datetime_cell(MutableColumnPtr& column, DataTypePtr date_type_ptr, c
             result = CastToDateV2::from_string_non_strict_mode(
                     {datetime_str.c_str(), datetime_str.size()}, date_value, nullptr, params);
         } else {
-            result = CastToDateOrDatetime::from_string_non_strict_mode<
-                    PType == PrimitiveType::TYPE_DATETIME>(
-                    {datetime_str.c_str(), datetime_str.size()}, date_value, nullptr, params);
+            if constexpr (PType == PrimitiveType::TYPE_DATETIME) {
+                result = CastToDateOrDatetime::from_string_non_strict_mode<
+                        DatelikeTargetType::DATE_TIME>({datetime_str.c_str(), datetime_str.size()},
+                                                       date_value, nullptr, params);
+            } else {
+                result =
+                        CastToDateOrDatetime::from_string_non_strict_mode<DatelikeTargetType::DATE>(
+                                {datetime_str.c_str(), datetime_str.size()}, date_value, nullptr,
+                                params);
+            }
         }
     } else {
         date_value = any_cast<typename PrimitiveTypeTraits<PType>::CppType>(cell);
@@ -528,7 +535,7 @@ bool insert_cell(MutableColumnPtr& column, DataTypePtr type_ptr, const AnyType& 
             if (datetime_is_string_format) {
                 auto value = any_cast<std::string>(cell);
                 CastParameters params {.status = Status::OK(), .is_strict = true};
-                RETURN_IF_FALSE(CastToTimeV2::from_string_strict_mode<true>(
+                RETURN_IF_FALSE(CastToTimeV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
                         StringRef {value}, time_value, nullptr, type_ptr->get_scale(), params));
             } else {
                 time_value = any_cast<TimeValue::TimeType>(cell);

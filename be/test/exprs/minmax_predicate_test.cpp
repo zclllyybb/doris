@@ -23,11 +23,11 @@
 #include "common/config.h"
 #include "exec/runtime_filter/utils.h"
 #include "exprs/create_predicate_function.h"
+#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
+#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
+#include "exprs/function/cast/cast_to_datev2_impl.hpp"
 #include "gtest/internal/gtest-internal.h"
 #include "testutil/column_helper.h"
-#include "exprs/function/cast/cast_to_date_or_datetime_impl.hpp"
-#include "exprs/function/cast/cast_to_datev2_impl.hpp"
-#include "exprs/function/cast/cast_to_datetimev2_impl.hpp"
 
 namespace doris {
 class MinmaxPredicateTest : public testing::Test {
@@ -48,16 +48,17 @@ void test_numeric() {
     NumericType def {};
     if constexpr (std::is_same_v<NumericType, VecDateTimeValue>) {
         CastParameters p;
-        CastToDateOrDatetime::from_string_strict_mode<true, true>(
+        CastToDateOrDatetime::from_string_strict_mode<DatelikeParseMode::STRICT,
+                                                      DatelikeTargetType::DATE_TIME>(
                 {"2010-01-01", strlen("2010-01-01")}, def, nullptr, p);
     } else if constexpr (std::is_same_v<NumericType, DateV2Value<DateV2ValueType>>) {
         CastParameters p;
-        CastToDateV2::from_string_strict_mode<true>({"2010-01-01", strlen("2010-01-01")}, def,
-                                                    nullptr, p);
+        CastToDateV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
+                {"2010-01-01", strlen("2010-01-01")}, def, nullptr, p);
     } else if constexpr (std::is_same_v<NumericType, DateV2Value<DateTimeV2ValueType>>) {
         CastParameters p;
-        CastToDatetimeV2::from_string_strict_mode<true>({"2010-01-01", strlen("2010-01-01")}, def,
-                                                        nullptr, -1, p);
+        CastToDatetimeV2::from_string_strict_mode<DatelikeParseMode::STRICT>(
+                {"2010-01-01", strlen("2010-01-01")}, def, nullptr, -1, p);
     }
 
     MutableColumnPtr column;
