@@ -571,7 +571,7 @@ Status DataTypeDateSerDe<T>::from_decimal_batch(
     CastParameters params {.status = Status::OK(), .is_strict = false};
     for (size_t i = 0; i < decimal_col.size(); ++i) {
         CppType val;
-        if (CastToDateOrDatetime::from_decimal < DatelikeParseMode::STRICT,
+        if (CastToDateOrDatetime::from_decimal < DatelikeParseMode::NON_STRICT,
             IsDatetime ? DatelikeTargetType::DATE_TIME
                        : DatelikeTargetType::DATE > (decimal_col.get_intergral_part(i),
                                                      decimal_col.get_fractional_part(i),

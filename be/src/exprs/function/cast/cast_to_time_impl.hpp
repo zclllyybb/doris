@@ -206,6 +206,7 @@ struct CastToTimeV2 {
 template <DatelikeParseMode ParseMode, typename T>
 inline bool CastToTimeV2::from_integer(T input, TimeValue::TimeType& val, CastParameters& params) {
     constexpr bool IsStrict = is_datelike_parse_strict(ParseMode);
+    DCHECK(IsStrict == params.is_strict);
     // T maybe int128 then bigger than int64_t. so we must check before cast
     SET_PARAMS_RET_FALSE_IFN(input <= std::numeric_limits<int64_t>::max() &&
                                      input >= std::numeric_limits<int64_t>::min(),

@@ -121,6 +121,7 @@ struct CastToDatetimeV2 {
     static inline bool from_float(T float_value, DateV2Value<DateTimeV2ValueType>& val,
                                   uint32_t to_scale, CastParameters& params) {
         constexpr bool IsStrict = is_datelike_parse_strict(ParseMode);
+        DCHECK(IsStrict == params.is_strict);
         SET_PARAMS_RET_FALSE_IFN(float_value > 0 && !std::isnan(float_value) &&
                                          !std::isinf(float_value) &&
                                          float_value < (double)std::numeric_limits<int64_t>::max(),
@@ -160,6 +161,7 @@ struct CastToDatetimeV2 {
                                     DateV2Value<DateTimeV2ValueType>& res, uint32_t to_scale,
                                     CastParameters& params) {
         constexpr bool IsStrict = is_datelike_parse_strict(ParseMode);
+        DCHECK(IsStrict == params.is_strict);
         SET_PARAMS_RET_FALSE_IFN(int_part <= std::numeric_limits<int64_t>::max() && int_part >= 1,
                                  "invalid decimal value for datetimev2: {}.{}", int_part,
                                  frac_part);
@@ -229,6 +231,7 @@ template <DatelikeParseMode ParseMode, typename T>
 inline bool CastToDatetimeV2::from_integer(T input, DateV2Value<DateTimeV2ValueType>& val,
                                            CastParameters& params) {
     constexpr bool IsStrict = is_datelike_parse_strict(ParseMode);
+    DCHECK(IsStrict == params.is_strict);
     // T maybe int128 then bigger than int64_t. so we must check before cast
     SET_PARAMS_RET_FALSE_IFN(input <= std::numeric_limits<int64_t>::max() && input > 0,
                              "invalid int value for datetimev2: {}", input);
