@@ -48,6 +48,7 @@ namespace doris {
 class PipelineFragmentContext;
 class PipelineTask;
 class Dependency;
+class RecCTEScanLocalState;
 
 struct ReportStatusRequest {
     const Status status;
@@ -164,11 +165,6 @@ public:
 
     int32_t runtime_filter_wait_time_ms() const {
         return _query_options.runtime_filter_wait_time_ms;
-    }
-
-    bool runtime_filter_wait_infinitely() const {
-        return _query_options.__isset.runtime_filter_wait_infinitely &&
-               _query_options.runtime_filter_wait_infinitely;
     }
 
     int be_exec_version() const {
@@ -297,6 +293,22 @@ public:
     void set_first_error_msg(std::string error_msg);
     std::string get_first_error_msg();
 
+    Status send_block_to_cte_scan(const TUniqueId& instance_id, int node_id,
+                                  const google::protobuf::RepeatedPtrField<doris::PBlock>& pblocks,
+                                  bool eos);
+    void registe_cte_scan(const TUniqueId& instance_id, int node_id, RecCTEScanLocalState* scan);
+    void deregiste_cte_scan(const TUniqueId& instance_id, int node_id);
+
+    std::vector<int> get_fragment_ids() {
+        std::vector<int> fragment_ids;
+        for (const auto& it : _fragment_id_to_pipeline_ctx) {
+            fragment_ids.push_back(it.first);
+        }
+        return fragment_ids;
+    }
+
+    Status reset_global_rf(const google::protobuf::RepeatedField<int32_t>& filter_ids);
+
 private:
     friend class QueryTaskController;
 
@@ -380,6 +392,10 @@ private:
     // file cache context holders
     std::vector<io::BlockFileCache::QueryFileCacheContextHolderPtr> _query_context_holders;
 
+    // instance id + node id -> cte scan
+    std::map<std::pair<TUniqueId, int>, RecCTEScanLocalState*> _cte_scan;
+    std::mutex _cte_scan_lock;
+
 public:
     // when fragment of pipeline is closed, it will register its profile to this map by using add_fragment_profile
     void add_fragment_profile(
@@ -396,7 +412,7 @@ public:
     timespec get_query_arrival_timestamp() const { return this->_query_arrival_timestamp; }
     QuerySource get_query_source() const { return this->_query_source; }
 
-    const TQueryOptions get_query_options() const { return _query_options; }
+    TQueryOptions get_query_options() const { return _query_options; }
 };
 
 } // namespace doris

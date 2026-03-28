@@ -73,6 +73,7 @@ class MemTrackerLimiter;
 class QueryContext;
 class RuntimeFilterConsumer;
 class RuntimeFilterProducer;
+class TaskExecutionContext;
 
 // A collection of items that are part of the global state of a
 // query and shared across all execution nodes of that query.
@@ -530,7 +531,7 @@ public:
         _runtime_filter_mgr = runtime_filter_mgr;
     }
 
-    QueryContext* get_query_ctx() { return _query_ctx; }
+    QueryContext* get_query_ctx() const { return _query_ctx; }
 
     [[nodiscard]] bool low_memory_mode() const;
 
@@ -560,6 +561,12 @@ public:
     bool enable_broadcast_join_force_passthrough() const {
         return _query_options.__isset.enable_broadcast_join_force_passthrough &&
                _query_options.enable_broadcast_join_force_passthrough;
+    }
+
+    int cte_max_recursion_depth() const {
+        return _query_options.__isset.cte_max_recursion_depth
+                       ? _query_options.cte_max_recursion_depth
+                       : 0;
     }
 
     int rpc_verbose_profile_max_instance_count() const {
@@ -637,6 +644,8 @@ public:
         _task_execution_context_inited = true;
         _task_execution_context = context;
     }
+
+    bool task_execution_context_inited() const { return _task_execution_context_inited; }
 
     std::weak_ptr<TaskExecutionContext> get_task_execution_context() {
         CHECK(_task_execution_context_inited)
@@ -803,6 +812,15 @@ public:
                                       _query_options.hnsw_bounded_queue, _query_options.ivf_nprobe);
     }
 
+    bool runtime_filter_wait_infinitely() const {
+        return _query_options.__isset.runtime_filter_wait_infinitely &&
+               _query_options.runtime_filter_wait_infinitely;
+    }
+
+    const std::set<int>& get_deregister_runtime_filter() const;
+
+    void merge_register_runtime_filter(const std::set<int>& runtime_filter_ids);
+
 private:
     Status create_error_log_file();
 
@@ -935,6 +953,8 @@ private:
 
     // used for encoding the global lazy materialize
     std::shared_ptr<IdFileMap> _id_file_map = nullptr;
+
+    std::set<int> _registered_runtime_filter_ids;
 };
 
 #define RETURN_IF_CANCELLED(state)               \

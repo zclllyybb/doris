@@ -28,7 +28,6 @@
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -58,6 +57,9 @@ struct LocalMergeContext {
     std::mutex mtx;
     std::shared_ptr<RuntimeFilterMerger> merger;
     std::vector<std::shared_ptr<RuntimeFilterProducer>> producers;
+    // Tracks the recursive CTE round.  When a producer from a newer round
+    // registers, the context is reset (merger recreated, old producers dropped).
+    uint32_t stage = 0;
 
     Status register_producer(const QueryContext* query_ctx, const TRuntimeFilterDesc* desc,
                              std::shared_ptr<RuntimeFilterProducer> producer);
@@ -71,6 +73,12 @@ struct GlobalMergeContext {
     std::unordered_set<UniqueId> arrive_id;
     std::vector<PNetworkAddress> source_addrs;
     std::atomic<bool> done = false;
+
+    // for represent the round number of recursive cte
+    // if lower stage rf input to higher stage, we just discard the rf
+    uint32_t stage = 0;
+
+    Status reset(QueryContext* query_ctx);
 };
 
 // owned by RuntimeState
@@ -81,7 +89,7 @@ public:
 
     // get/set consumer
     std::vector<std::shared_ptr<RuntimeFilterConsumer>> get_consume_filters(int filter_id);
-    Status register_consumer_filter(const QueryContext* query_ctx, const TRuntimeFilterDesc& desc,
+    Status register_consumer_filter(const RuntimeState* state, const TRuntimeFilterDesc& desc,
                                     int node_id,
                                     std::shared_ptr<RuntimeFilterConsumer>* consumer_filter);
 
@@ -101,6 +109,17 @@ public:
     Status sync_filter_size(const PSyncFilterSizeRequest* request);
 
     std::string debug_string();
+
+    void remove_filter(int32_t filter_id) {
+        std::lock_guard<std::mutex> l(_lock);
+        _consumer_map.erase(filter_id);
+        // NOTE: _local_merge_map is NOT erased here.  It is reset lazily in
+        // LocalMergeContext::register_producer when a producer from a newer
+        // recursive CTE round registers.  Erasing eagerly here would race with
+        // multi-fragment REBUILD: a consumer-only fragment's remove_filter could
+        // delete the entry that the producer fragment just re-registered.
+        _producer_id_set.erase(filter_id);
+    }
 
 private:
     /**
@@ -152,6 +171,9 @@ public:
         std::shared_lock<std::shared_mutex> read_lock(_filter_map_mutex);
         return _filter_map.empty();
     }
+
+    Status reset_global_rf(QueryContext* query_ctx,
+                           const google::protobuf::RepeatedField<int32_t>& filter_ids);
 
 private:
     Status _init_with_desc(std::shared_ptr<QueryContext> query_ctx,
