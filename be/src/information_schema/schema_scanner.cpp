@@ -74,6 +74,8 @@
 #include "information_schema/schema_table_options_scanner.h"
 #include "information_schema/schema_table_privileges_scanner.h"
 #include "information_schema/schema_table_properties_scanner.h"
+#include "information_schema/schema_table_stream_consumption_scanner.h"
+#include "information_schema/schema_table_streams_scanner.h"
 #include "information_schema/schema_tables_scanner.h"
 #include "information_schema/schema_tablets_scanner.h"
 #include "information_schema/schema_user_privileges_scanner.h"
@@ -265,6 +267,10 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return SchemaFileCacheInfoScanner::create_unique();
     case TSchemaTableType::SCH_AUTHENTICATION_INTEGRATIONS:
         return SchemaAuthenticationIntegrationsScanner::create_unique();
+    case TSchemaTableType::SCH_TABLE_STREAMS:
+        return SchemaTableStreamsScanner::create_unique();
+    case TSchemaTableType::SCH_TABLE_STREAM_CONSUMPTION:
+        return SchemaTableStreamConsumptionScanner::create_unique();
     default:
         return SchemaDummyScanner::create_unique();
         break;

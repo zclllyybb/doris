@@ -43,8 +43,11 @@ public class ConfigUtil {
     private static ObjectMapper objectMapper = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(ConfigUtil.class);
 
-    public static String getServerId(long jobId) {
-        return String.valueOf(Math.abs(String.valueOf(jobId).hashCode()));
+    public static String getServerId(String jobId) {
+        // Use bitwise AND with Integer.MAX_VALUE to strip the sign bit,
+        // which avoids the edge case where Math.abs(Integer.MIN_VALUE) returns MIN_VALUE
+        // (negative).
+        return String.valueOf(jobId.hashCode() & Integer.MAX_VALUE);
     }
 
     public static ZoneId getServerTimeZoneFromJdbcUrl(String jdbcUrl) {
@@ -107,6 +110,21 @@ public class ConfigUtil {
         return properties;
     }
 
+    public static String[] getTableList(String schema, Map<String, String> cdcConfig) {
+        String includingTables = cdcConfig.get(DataSourceConfigKeys.INCLUDE_TABLES);
+        String table = cdcConfig.get(DataSourceConfigKeys.TABLE);
+        if (StringUtils.isNotEmpty(includingTables)) {
+            return Arrays.stream(includingTables.split(","))
+                    .map(t -> schema + "." + t.trim())
+                    .toArray(String[]::new);
+        } else if (StringUtils.isNotEmpty(table)) {
+            Preconditions.checkArgument(!table.contains(","), "table only supports one table");
+            return new String[] {schema + "." + table.trim()};
+        } else {
+            return new String[0];
+        }
+    }
+
     public static boolean is13Timestamp(String s) {
         return s != null && s.matches("\\d{13}");
     }
@@ -163,6 +181,31 @@ public class ConfigUtil {
                 String tableName = key.substring(prefix.length(), key.length() - suffix.length());
                 if (!tableName.isEmpty()) {
                     result.put(tableName, parseExcludeColumns(config, tableName));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Parse all target-table name mappings from config.
+     *
+     * <p>Scans all keys matching {@code "table.<srcTableName>.target_table"} and returns a map from
+     * source table name to target (Doris) table name. Tables without a mapping are NOT included;
+     * callers should use {@code getOrDefault(srcTable, srcTable)}.
+     */
+    public static Map<String, String> parseAllTargetTableMappings(Map<String, String> config) {
+        String prefix = DataSourceConfigKeys.TABLE + ".";
+        String suffix = "." + DataSourceConfigKeys.TABLE_TARGET_TABLE_SUFFIX;
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, String> entry : config.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith(prefix) && key.endsWith(suffix)) {
+                String srcTable = key.substring(prefix.length(), key.length() - suffix.length());
+                String rawValue = entry.getValue();
+                String dstTable = rawValue != null ? rawValue.trim() : "";
+                if (!srcTable.isEmpty() && !dstTable.isEmpty()) {
+                    result.put(srcTable, dstTable);
                 }
             }
         }
