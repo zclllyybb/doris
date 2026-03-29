@@ -36,13 +36,12 @@ Status RuntimeFilter::_push_to_remote(RuntimeState* state, const TNetworkAddress
 
     auto merge_filter_request = std::make_shared<PMergeFilterRequest>();
     merge_filter_request->set_stage(_stage);
-    auto merge_filter_callback = DummyBrpcCallback<PMergeFilterResponse>::create_shared();
+    auto merge_filter_callback = DummyBrpcCallback<PMergeFilterResponse>::create_shared(
+            state->query_options().ignore_runtime_filter_error ? std::weak_ptr<QueryContext> {}
+                                                               : state->get_query_ctx_weak());
     auto merge_filter_closure =
             AutoReleaseClosure<PMergeFilterRequest, DummyBrpcCallback<PMergeFilterResponse>>::
-                    create_unique(merge_filter_request, merge_filter_callback,
-                                  state->query_options().ignore_runtime_filter_error
-                                          ? std::weak_ptr<QueryContext> {}
-                                          : state->get_query_ctx_weak());
+                    create_unique(merge_filter_request, merge_filter_callback);
     void* data = nullptr;
     int len = 0;
 

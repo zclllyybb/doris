@@ -259,8 +259,6 @@ Status RuntimeFilterMergeControllerEntity::send_filter_size(std::shared_ptr<Quer
     Status st = Status::OK();
     // After all runtime filters' size are collected, we should send response to all producers.
     if (cnt_val.merger->add_rf_size(request->filter_size())) {
-        auto ctx = query_ctx->ignore_runtime_filter_error() ? std::weak_ptr<QueryContext> {}
-                                                            : query_ctx;
         for (auto addr : cnt_val.source_addrs) {
             std::shared_ptr<PBackendService_Stub> stub(
                     ExecEnv::GetInstance()->brpc_internal_client_cache()->get_client(addr));
@@ -274,10 +272,14 @@ Status RuntimeFilterMergeControllerEntity::send_filter_size(std::shared_ptr<Quer
             auto sync_request = std::make_shared<PSyncFilterSizeRequest>();
             sync_request->set_stage(iter->second.stage);
 
+            // if don't ignore rf error, cancel query
             auto closure = AutoReleaseClosure<PSyncFilterSizeRequest,
                                               DummyBrpcCallback<PSyncFilterSizeResponse>>::
                     create_unique(sync_request,
-                                  DummyBrpcCallback<PSyncFilterSizeResponse>::create_shared(), ctx);
+                                  DummyBrpcCallback<PSyncFilterSizeResponse>::create_shared(
+                                          query_ctx->ignore_runtime_filter_error()
+                                                  ? std::weak_ptr<QueryContext> {}
+                                                  : query_ctx->weak_from_this()));
 
             auto* pquery_id = closure->request_->mutable_query_id();
             pquery_id->set_hi(query_ctx->query_id().hi);
@@ -429,7 +431,7 @@ Status RuntimeFilterMergeControllerEntity::_send_rf_to_target(GlobalMergeContext
         auto closure = AutoReleaseClosure<PPublishFilterRequestV2,
                                           DummyBrpcCallback<PPublishFilterResponse>>::
                 create_unique(std::make_shared<PPublishFilterRequestV2>(apply_request),
-                              DummyBrpcCallback<PPublishFilterResponse>::create_shared(), ctx);
+                              DummyBrpcCallback<PPublishFilterResponse>::create_shared(ctx));
 
         closure->request_->set_merge_time(merge_time);
         *closure->request_->mutable_query_id() = query_id;

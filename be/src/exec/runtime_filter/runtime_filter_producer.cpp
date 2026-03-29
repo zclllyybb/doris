@@ -98,53 +98,6 @@ Status RuntimeFilterProducer::publish(RuntimeState* state, bool build_hash_table
     return Status::OK();
 }
 
-class SyncSizeClosure : public AutoReleaseClosure<PSendFilterSizeRequest,
-                                                  DummyBrpcCallback<PSendFilterSizeResponse>> {
-    std::shared_ptr<Dependency> _dependency;
-    // Should use weak ptr here, because when query context deconstructs, should also delete runtime filter
-    // context, it not the memory is not released. And rpc is in another thread, it will hold rf context
-    // after query context because the rpc is not returned.
-    std::weak_ptr<RuntimeFilterWrapper> _wrapper;
-    using Base =
-            AutoReleaseClosure<PSendFilterSizeRequest, DummyBrpcCallback<PSendFilterSizeResponse>>;
-    friend class RuntimeFilterProducer;
-    ENABLE_FACTORY_CREATOR(SyncSizeClosure);
-
-    void _process_if_rpc_failed() override {
-        Defer defer {[&]() {
-            Base::_process_if_rpc_failed();
-            ((CountedFinishDependency*)_dependency.get())->sub();
-        }};
-        auto wrapper = _wrapper.lock();
-        if (!wrapper) {
-            return;
-        }
-
-        wrapper->set_state(RuntimeFilterWrapper::State::DISABLED, cntl_->ErrorText());
-    }
-
-    void _process_if_meet_error_status(const Status& status) override {
-        Defer defer {[&]() {
-            Base::_process_if_meet_error_status(status);
-            ((CountedFinishDependency*)_dependency.get())->sub();
-        }};
-        auto wrapper = _wrapper.lock();
-        if (!wrapper) {
-            return;
-        }
-
-        wrapper->set_state(RuntimeFilterWrapper::State::DISABLED, status.to_string());
-    }
-
-public:
-    SyncSizeClosure(std::shared_ptr<PSendFilterSizeRequest> req,
-                    std::shared_ptr<DummyBrpcCallback<PSendFilterSizeResponse>> callback,
-                    std::shared_ptr<Dependency> dependency,
-                    std::shared_ptr<RuntimeFilterWrapper> wrapper,
-                    std::weak_ptr<QueryContext> context)
-            : Base(req, callback, context), _dependency(std::move(dependency)), _wrapper(wrapper) {}
-};
-
 void RuntimeFilterProducer::latch_dependency(
         const std::shared_ptr<CountedFinishDependency>& dependency) {
     std::unique_lock<std::recursive_mutex> l(_rmtx);
@@ -208,14 +161,16 @@ Status RuntimeFilterProducer::send_size(RuntimeState* state, uint64_t local_filt
 
     auto request = std::make_shared<PSendFilterSizeRequest>();
     request->set_stage(_stage);
-
-    auto callback = DummyBrpcCallback<PSendFilterSizeResponse>::create_shared();
+    auto callback = SyncSizeCallback::create_shared(_dependency, _wrapper,
+                                                    state->get_query_ctx()->weak_from_this());
+    // Store callback in the producer to keep it alive until the RPC completes.
+    // AutoReleaseClosure holds callbacks via weak_ptr, so without this the callback
+    // would be destroyed when this function returns and error-path sub() would never fire.
+    _sync_size_callback = callback;
     // RuntimeFilter maybe deconstructed before the rpc finished, so that could not use
     // a raw pointer in closure. Has to use the context's shared ptr.
-    auto closure = SyncSizeClosure::create_unique(request, callback, _dependency, _wrapper,
-                                                  state->query_options().ignore_runtime_filter_error
-                                                          ? std::weak_ptr<QueryContext> {}
-                                                          : state->get_query_ctx_weak());
+    auto closure = AutoReleaseClosure<PSendFilterSizeRequest, SyncSizeCallback>::create_unique(
+            request, callback);
     auto* pquery_id = request->mutable_query_id();
     pquery_id->set_hi(state->get_query_ctx()->query_id().hi);
     pquery_id->set_lo(state->get_query_ctx()->query_id().lo);
