@@ -659,6 +659,14 @@ public class Config extends ConfigBase {
                     + "insert into and stream load use group commit by default."})
     public static boolean wait_internal_group_commit_finish = false;
 
+    @ConfField(mutable = true, masterOnly = true, description = {
+            "The stale threshold of checkpoint image file in cloud mode (in seconds). "
+                    + "If the image file is older than this threshold, a new checkpoint will be triggered "
+                    + "even if there are no new journals. This helps keep table version, partition version, "
+                    + "and tablet stats in the image up-to-date. If the value is less than or equal to 0, "
+                    + "this feature is disabled."})
+    public static long cloud_checkpoint_image_stale_threshold_seconds = 3600;
+
     @ConfField(mutable = false, masterOnly = true, description = {"攒批的默认提交时间，单位是毫秒",
             "Default commit interval in ms for group commit"})
     public static int group_commit_interval_ms_default_value = 10000;
@@ -3540,7 +3548,6 @@ public class Config extends ConfigBase {
             description = { "存算分离模式下，一个 BE 挂掉多长时间后，它的 tablet 彻底转移到其他 BE 上" })
     public static int rehash_tablet_after_be_dead_seconds = 3600;
 
-
     @ConfField(mutable = true, description = {"存算分离模式下是否启用自动启停功能，默认 true",
         "Whether to enable the automatic start-stop feature in cloud model, default is true."})
     public static boolean enable_auto_start_for_cloud_cluster = true;
@@ -3553,6 +3560,14 @@ public class Config extends ConfigBase {
     @ConfField(description = {"Get tablet stat task 的最大并发数。",
         "Maximal concurrent num of get tablet stat job."})
     public static int max_get_tablet_stat_task_threads_num = 4;
+
+    @ConfField(description = {
+            "Maximal concurrent num of master FE sync tablet stats task to observers and followers in cloud mode."})
+    public static int cloud_sync_tablet_stats_task_threads_num = 4;
+
+    @ConfField(mutable = true, description = {"Version of getting tablet stats in cloud mode. "
+            + "Version 1: get all tablets; Version 2: get active and interval expired tablets"})
+    public static int cloud_get_tablet_stats_version = 2;
 
     @ConfField(description = {"存算分离模式下同步 table 和 partition version 的间隔. 所有 frontend 都会检查",
             "Cloud table and partition version syncer interval. All frontends will perform the checking"})
