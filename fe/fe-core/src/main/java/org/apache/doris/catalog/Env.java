@@ -297,6 +297,7 @@ import org.apache.doris.transaction.DbUsedDataQuotaInfoCollector;
 import org.apache.doris.transaction.GlobalExternalTransactionInfoMgr;
 import org.apache.doris.transaction.GlobalTransactionMgrIface;
 import org.apache.doris.transaction.PublishVersionDaemon;
+import org.apache.doris.tso.TSOService;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -604,6 +605,8 @@ public class Env {
     private final Map<String, Supplier<MasterDaemon>> configtoThreads = ImmutableMap
             .of("dynamic_partition_check_interval_seconds", this::getDynamicPartitionScheduler);
 
+    private TSOService tsoService;
+
     public List<TFrontendInfo> getFrontendInfos() {
         List<TFrontendInfo> res = new ArrayList<>();
 
@@ -873,7 +876,12 @@ public class Env {
         if (Config.agent_task_health_check_intervals_ms > 0) {
             this.agentTaskCleanupDaemon = new AgentTaskCleanupDaemon();
         }
+        this.tsoService = new TSOService();
         this.tableStreamManager = new TableStreamManager();
+    }
+
+    public static Map<String, Long> getSessionReportTimeMap() {
+        return sessionReportTimeMap;
     }
 
     public void registerTempTableAndSession(Table table) {
@@ -2015,6 +2023,7 @@ public class Env {
             keyManager.init();
         }
         agentTaskCleanupDaemon.start();
+        tsoService.start();
     }
 
     // start threads that should run on all FE
@@ -2910,6 +2919,16 @@ public class Env {
         this.keyManagerStore.write(out);
         LOG.info("finished save KeyManager to image");
         return checksum;
+    }
+
+    // Persist TSO-related info into image for fast recovery
+    public long saveTSO(CountingDataOutputStream dos, long checksum) throws IOException {
+        return tsoService.saveTSO(dos, checksum);
+    }
+
+    // Load TSO-related info from image during checkpoint load
+    public long loadTSO(DataInputStream dis, long checksum) throws IOException {
+        return tsoService.loadTSO(dis, checksum);
     }
 
     public long saveConstraintManager(CountingDataOutputStream out, long checksum) throws IOException {
@@ -6201,6 +6220,7 @@ public class Env {
                 .buildSkipWriteIndexOnLoad()
                 .buildDisableAutoCompaction()
                 .buildEnableSingleReplicaCompaction()
+                .buildEnableTso()
                 .buildTimeSeriesCompactionEmptyRowsetsThreshold()
                 .buildTimeSeriesCompactionLevelThreshold()
                 .buildVerticalCompactionNumColumnsPerGroup()
@@ -7544,4 +7564,13 @@ public class Env {
     protected void checkClusterSnapshot(File dir) {}
 
     protected void cloneClusterSnapshot() throws Exception {}
+
+    public TSOService getTSOService() {
+        return tsoService;
+    }
+
+    public static TSOService getCurrentTSOService() {
+        return getCurrentEnv().getTSOService();
+    }
+
 }
