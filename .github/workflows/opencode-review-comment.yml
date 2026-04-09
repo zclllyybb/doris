@@ -1,0 +1,75 @@
+name: Code Review Comment Dispatch
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  resolve-pr:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/review')
+    outputs:
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+    steps:
+      - name: Get PR info
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_JSON=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }})
+          HEAD_SHA=$(echo "$PR_JSON" | jq -r '.head.sha')
+          BASE_SHA=$(echo "$PR_JSON" | jq -r '.base.sha')
+          echo "pr_number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+  code-review:
+    needs: resolve-pr
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/review')
+    uses: ./.github/workflows/opencode-review-runner.yml
+    secrets: inherit
+    with:
+      pr_number: ${{ needs.resolve-pr.outputs.pr_number }}
+      head_sha: ${{ needs.resolve-pr.outputs.head_sha }}
+      base_sha: ${{ needs.resolve-pr.outputs.base_sha }}
+
+  refresh-required-check:
+    needs:
+      - resolve-pr
+      - code-review
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.resolve-pr.result == 'success' && needs.code-review.result != 'skipped' }}
+    steps:
+      - name: Rerun pull_request Code Review workflow for current head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+        run: |
+          RUNS_JSON=$(gh api repos/${REPO}/actions/workflows/opencode-review.yml/runs --paginate -f event=pull_request -f head_sha=${HEAD_SHA})
+          RUN_ID=$(printf '%s' "$RUNS_JSON" | jq -r '
+            .workflow_runs
+            | sort_by(.created_at)
+            | reverse
+            | map(select(.head_sha != null))
+            | .[0].id // empty
+          ')
+
+          if [ -z "$RUN_ID" ]; then
+            echo "No pull_request workflow run found for opencode-review.yml at head ${HEAD_SHA}."
+            exit 1
+          fi
+
+          gh api repos/${REPO}/actions/runs/${RUN_ID}/rerun -X POST
