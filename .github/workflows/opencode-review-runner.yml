@@ -182,7 +182,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Submit final review
+      - name: Submit final result comment
         if: ${{ steps.review.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -190,15 +190,16 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           DECISION: ${{ steps.review.outputs.decision }}
           SUMMARY: ${{ steps.review.outputs.summary }}
+          HEAD_SHA: ${{ inputs.head_sha }}
         run: |
-          printf '%s\n' "$SUMMARY" > /tmp/review_body.txt
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$(cat <<EOF
+          <!-- opencode-review-result -->
+          HEAD_SHA: ${HEAD_SHA}
+          DECISION: ${DECISION}
 
-          if [ "$DECISION" = "APPROVE" ]; then
-            gh pr review "$PR_NUMBER" --repo "$REPO" --approve -F /tmp/review_body.txt
-            exit 0
-          fi
-
-          gh pr review "$PR_NUMBER" --repo "$REPO" --request-changes -F /tmp/review_body.txt
+          ${SUMMARY}
+          EOF
+          )"
 
       - name: Verify submitted review decision
         if: ${{ steps.review.outcome == 'success' }}
@@ -209,16 +210,19 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           HEAD_SHA: ${{ inputs.head_sha }}
         run: |
-          REVIEWS=$(gh api repos/${REPO}/pulls/${PR_NUMBER}/reviews)
-          review_state=$(printf '%s' "$REVIEWS" | jq -r --arg head_sha "$HEAD_SHA" '
+          COMMENTS=$(gh api repos/${REPO}/issues/${PR_NUMBER}/comments)
+          review_state=$(printf '%s' "$COMMENTS" | jq -r --arg head_sha "$HEAD_SHA" '
             [ .[]
               | select(.user.login == "github-actions[bot]")
-              | select(.commit_id == $head_sha)
-              | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+              | select(.body | contains("<!-- opencode-review-result -->"))
+              | select(.body | contains("HEAD_SHA: " + $head_sha))
             ]
-            | sort_by(.submitted_at)
+            | sort_by(.created_at)
             | last
-            | .state // ""
+            | if .body | contains("DECISION: APPROVE") then "APPROVED"
+              elif .body | contains("DECISION: REQUEST_CHANGES") then "CHANGES_REQUESTED"
+              else ""
+              end
           ')
 
           echo "review_state=$review_state" >> "$GITHUB_OUTPUT"
