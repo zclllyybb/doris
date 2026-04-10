@@ -212,15 +212,16 @@ jobs:
         run: |
           COMMENTS=$(gh api repos/${REPO}/issues/${PR_NUMBER}/comments)
           review_state=$(printf '%s' "$COMMENTS" | jq -r --arg head_sha "$HEAD_SHA" '
-            [ .[]
+            ([ .[]
               | select(.user.login == "github-actions[bot]")
-              | select(.body | contains("<!-- opencode-review-result -->"))
-              | select(.body | contains("HEAD_SHA: " + $head_sha))
+              | select((.body // "") | contains("<!-- opencode-review-result -->"))
+              | select((.body // "") | contains("HEAD_SHA: " + $head_sha))
             ]
             | sort_by(.created_at)
-            | last
-            | if .body | contains("DECISION: APPROVE") then "APPROVED"
-              elif .body | contains("DECISION: REQUEST_CHANGES") then "CHANGES_REQUESTED"
+            | last) as $comment
+            | if $comment == null then ""
+              elif ($comment.body // "") | contains("DECISION: APPROVE") then "APPROVED"
+              elif ($comment.body // "") | contains("DECISION: REQUEST_CHANGES") then "CHANGES_REQUESTED"
               else ""
               end
           ')

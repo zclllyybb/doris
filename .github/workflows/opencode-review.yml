@@ -3,66 +3,54 @@ name: Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        required: true
-        type: string
-      head_sha:
-        required: true
-        type: string
 
 permissions:
   pull-requests: read
+  statuses: write
 
 jobs:
-  code-review:
+  sync-status:
+    name: Sync review status
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - name: Resolve PR context
-        id: context
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "pr_number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
-            echo "head_sha=${{ inputs.head_sha }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          echo "head_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
-
       - name: Check automated review decision for current PR head
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.context.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.context.outputs.head_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           COMMENTS=$(gh api repos/${REPO}/issues/${PR_NUMBER}/comments)
           review_state=$(printf '%s' "$COMMENTS" | jq -r --arg head_sha "$HEAD_SHA" '
-            [ .[]
+            ([ .[]
               | select(.user.login == "github-actions[bot]")
-              | select(.body | contains("<!-- opencode-review-result -->"))
-              | select(.body | contains("HEAD_SHA: " + $head_sha))
+              | select((.body // "") | contains("<!-- opencode-review-result -->"))
+              | select((.body // "") | contains("HEAD_SHA: " + $head_sha))
             ]
             | sort_by(.created_at)
-            | last
-            | if .body | contains("DECISION: APPROVE") then "APPROVED"
-              elif .body | contains("DECISION: REQUEST_CHANGES") then "CHANGES_REQUESTED"
+            | last) as $comment
+            | if $comment == null then ""
+              elif ($comment.body // "") | contains("DECISION: APPROVE") then "APPROVED"
+              elif ($comment.body // "") | contains("DECISION: REQUEST_CHANGES") then "CHANGES_REQUESTED"
               else ""
               end
           ')
 
+          state="pending"
+          summary="Trigger /review to start automated review for ${HEAD_SHA}."
+
           if [ "$review_state" = "APPROVED" ]; then
-            echo "Found APPROVED automated review for ${HEAD_SHA}."
-            exit 0
+            state="success"
+            summary="Automated review approved the PR for ${HEAD_SHA}."
+          elif [ "$review_state" = "CHANGES_REQUESTED" ]; then
+            state="failure"
+            summary="Automated review requested changes for ${HEAD_SHA}."
           fi
 
-          if [ "$review_state" = "CHANGES_REQUESTED" ]; then
-            echo "Automated review requested changes for ${HEAD_SHA}."
-            exit 1
-          fi
-
-          echo "No automated review result exists for ${HEAD_SHA}. Trigger /review first."
-          exit 1
+          gh api repos/${REPO}/statuses/${HEAD_SHA} \
+            -X POST \
+            -f state="${state}" \
+            -f context='code-review' \
+            -f description="${summary}" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

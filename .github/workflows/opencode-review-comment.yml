@@ -34,7 +34,9 @@ jobs:
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
 
   code-review:
-    needs: resolve-pr
+    needs:
+      - resolve-pr
+      - mark-review-pending
     if: >-
       github.event.issue.pull_request &&
       contains(github.event.comment.body, '/review')
@@ -44,6 +46,26 @@ jobs:
       pr_number: ${{ needs.resolve-pr.outputs.pr_number }}
       head_sha: ${{ needs.resolve-pr.outputs.head_sha }}
       base_sha: ${{ needs.resolve-pr.outputs.base_sha }}
+
+  mark-review-pending:
+    needs: resolve-pr
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/review')
+    steps:
+      - name: Mark Code Review status as pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+        run: |
+          gh api repos/${REPO}/statuses/${HEAD_SHA} \
+            -X POST \
+            -f state='pending' \
+            -f context='code-review' \
+            -f description="Automated review is running for ${HEAD_SHA}." \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   refresh-required-check:
     needs:
@@ -61,15 +83,16 @@ jobs:
         run: |
           COMMENTS=$(gh api repos/${REPO}/issues/${PR_NUMBER}/comments)
           review_state=$(printf '%s' "$COMMENTS" | jq -r --arg head_sha "$HEAD_SHA" '
-            [ .[]
+            ([ .[]
               | select(.user.login == "github-actions[bot]")
-              | select(.body | contains("<!-- opencode-review-result -->"))
-              | select(.body | contains("HEAD_SHA: " + $head_sha))
+              | select((.body // "") | contains("<!-- opencode-review-result -->"))
+              | select((.body // "") | contains("HEAD_SHA: " + $head_sha))
             ]
             | sort_by(.created_at)
-            | last
-            | if .body | contains("DECISION: APPROVE") then "APPROVED"
-              elif .body | contains("DECISION: REQUEST_CHANGES") then "CHANGES_REQUESTED"
+            | last) as $comment
+            | if $comment == null then ""
+              elif ($comment.body // "") | contains("DECISION: APPROVE") then "APPROVED"
+              elif ($comment.body // "") | contains("DECISION: REQUEST_CHANGES") then "CHANGES_REQUESTED"
               else ""
               end
           ')
