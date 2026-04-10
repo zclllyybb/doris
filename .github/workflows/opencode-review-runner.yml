@@ -69,7 +69,7 @@ jobs:
       - name: Prepare review prompt
         run: |
           cat > /tmp/review_prompt.txt <<'PROMPT'
-          You are performing an automated code review inside a GitHub Actions runner. The gh CLI is available and authenticated via GH_TOKEN. You can comment on the pull request.
+          You are performing an automated code review inside a GitHub Actions runner.
 
           Context:
           - Repository: PLACEHOLDER_REPO
@@ -87,21 +87,22 @@ jobs:
           - Give explicit conclusions for each applicable critical checkpoint.
           - Do not leave uncertainty when the code context can resolve it.
           - Use comments only for real issues. If something is safe because of upstream or downstream guarantees, state that clearly instead of speculating.
+          - Do NOT submit GitHub reviews or comments yourself. The workflow will submit the final review for you.
 
-          ## Submission
-          - After completing the review, you MUST provide a final summary opinion based on the rules defined in AGENTS.md and the code-review skill. The summary must include conclusions for each applicable critical checkpoint.
-          - You MUST submit exactly one final GitHub review for the current PR head SHA.
-          - The final review state MUST be either APPROVE or REQUEST_CHANGES. Do not leave the PR with only comments.
-          - If no blocking issues are found, submit: gh pr review PLACEHOLDER_PR_NUMBER --approve --body "<summary>"
-          - If blocking issues are found and no inline comments are needed, submit: gh pr review PLACEHOLDER_PR_NUMBER --request-changes --body "<summary>"
-          - If blocking issues are found and inline comments are needed, use GitHub Reviews API to submit a single REQUEST_CHANGES review with inline comments:
-              - Inline comment bodies may include GitHub suggested changes blocks when you can propose a precise patch.
-              - Prefer suggested changes for small, self-contained fixes (for example typos, trivial refactors, or narrowly scoped code corrections).
-              - Do not force suggested changes for broad, architectural, or multi-file issues; explain those normally.
-              - Build a JSON array of comments like: [{ "path": "<file>", "position": <diff_position>, "body": "..." }]
-              - Submit via: gh api repos/PLACEHOLDER_REPO/pulls/PLACEHOLDER_PR_NUMBER/reviews --input <json_file>
-              - The JSON file should contain: {"event":"REQUEST_CHANGES","body":"<summary>","comments":[...]}
-          - Do not submit a separate summary comment instead of the final review.
+          ## Final response format
+          - After completing the review, your final response MUST end with exactly one machine-readable result block in this format:
+            RESULT_START
+            {
+              "decision": "APPROVE" | "REQUEST_CHANGES",
+              "summary": "<markdown summary>"
+            }
+            RESULT_END
+          - Do not include code fences around the JSON.
+          - Do not write anything after RESULT_END.
+          - Set decision to APPROVE only when there are no blocking issues.
+          - Set decision to REQUEST_CHANGES when there is any blocking issue.
+          - The summary must include your final opinion and conclusions for each applicable critical checkpoint.
+          - If there are blocking issues, include them in the summary as a concise numbered list with file references when possible.
           PROMPT
           sed -i "s|PLACEHOLDER_REPO|${REPO}|g" /tmp/review_prompt.txt
           sed -i "s|PLACEHOLDER_PR_NUMBER|${PR_NUMBER}|g" /tmp/review_prompt.txt
@@ -136,6 +137,33 @@ jobs:
             failure_reason="OpenCode exited with status $status"
           fi
 
+          result_json=$(awk '
+            /^RESULT_START$/ {capture=1; current=""; next}
+            /^RESULT_END$/ {capture=0; result=current; found=1; next}
+            capture {current = current $0 ORS}
+            END {
+              if (found) {
+                printf "%s", result
+              }
+            }
+          ' /tmp/opencode-review.log)
+
+          if [ -z "$failure_reason" ] && [ -z "$result_json" ]; then
+            failure_reason="OpenCode did not emit a RESULT_START/RESULT_END result block"
+          fi
+
+          if [ -z "$failure_reason" ] && ! printf '%s' "$result_json" > /tmp/opencode-review-result.json; then
+            failure_reason="Failed to persist OpenCode review result"
+          fi
+
+          if [ -z "$failure_reason" ] && ! jq -e '.decision == "APPROVE" or .decision == "REQUEST_CHANGES"' /tmp/opencode-review-result.json > /dev/null; then
+            failure_reason="OpenCode emitted an invalid review decision"
+          fi
+
+          if [ -z "$failure_reason" ] && ! jq -e '.summary | type == "string" and length > 0' /tmp/opencode-review-result.json > /dev/null; then
+            failure_reason="OpenCode emitted an empty review summary"
+          fi
+
           if [ -n "$failure_reason" ]; then
             {
               echo "failure_reason<<EOF"
@@ -144,6 +172,33 @@ jobs:
             } >> "$GITHUB_OUTPUT"
             exit 1
           fi
+
+          decision=$(jq -r '.decision' /tmp/opencode-review-result.json)
+
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          {
+            echo "summary<<EOF"
+            jq -r '.summary' /tmp/opencode-review-result.json
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Submit final review
+        if: ${{ steps.review.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          DECISION: ${{ steps.review.outputs.decision }}
+          SUMMARY: ${{ steps.review.outputs.summary }}
+        run: |
+          printf '%s\n' "$SUMMARY" > /tmp/review_body.txt
+
+          if [ "$DECISION" = "APPROVE" ]; then
+            gh pr review "$PR_NUMBER" --repo "$REPO" --approve -F /tmp/review_body.txt
+            exit 0
+          fi
+
+          gh pr review "$PR_NUMBER" --repo "$REPO" --request-changes -F /tmp/review_body.txt
 
       - name: Verify submitted review decision
         if: ${{ steps.review.outcome == 'success' }}
