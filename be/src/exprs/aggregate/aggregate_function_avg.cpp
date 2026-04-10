@@ -21,7 +21,6 @@
 #include "exprs/aggregate/aggregate_function_avg.h"
 
 #include "core/data_type/define_primitive_type.h"
-#include "core/field.h"
 #include "exprs/aggregate/aggregate_function_simple_factory.h"
 #include "exprs/aggregate/helpers.h"
 
