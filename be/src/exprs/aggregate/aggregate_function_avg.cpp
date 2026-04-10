@@ -78,6 +78,6 @@ void register_aggregate_function_avg(AggregateFunctionSimpleFactory& factory) {
                                                                result_is_nullable, attr);
         }
     };
-    factory.register_function_both("avg", creator);
+    factory.register_function_both("sum", creator);
 }
 } // namespace doris
