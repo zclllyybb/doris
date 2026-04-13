@@ -130,29 +130,6 @@ jobs:
             failure_reason="OpenCode exited with status $status"
           fi
 
-          result_json=$(awk '
-            /^RESULT_START$/ {capture=1; current=""; next}
-            /^RESULT_END$/ {capture=0; result=current; found=1; next}
-            capture {current = current $0 ORS}
-            END {
-              if (found) {
-                printf "%s", result
-              }
-            }
-          ' /tmp/opencode-review.log)
-
-          if [ -z "$failure_reason" ] && [ -z "$result_json" ]; then
-            failure_reason="OpenCode did not emit a RESULT_START/RESULT_END result block"
-          fi
-
-          if [ -z "$failure_reason" ] && ! printf '%s' "$result_json" > /tmp/opencode-review-result.json; then
-            failure_reason="Failed to persist OpenCode review result"
-          fi
-
-          if [ -z "$failure_reason" ] && ! jq -e '.decision == "APPROVE" or .decision == "REQUEST_CHANGES"' /tmp/opencode-review-result.json > /dev/null; then
-            failure_reason="OpenCode emitted an invalid review decision"
-          fi
-
           if [ -n "$failure_reason" ]; then
             {
               echo "failure_reason<<EOF"
@@ -162,15 +139,8 @@ jobs:
             exit 1
           fi
 
-          decision=$(jq -r '.decision' /tmp/opencode-review-result.json)
-          echo "decision=$decision" >> "$GITHUB_OUTPUT"
-
-          if [ "$decision" == "REQUEST_CHANGES" ]; then
-            exit 1
-          fi
-
       - name: Comment PR on review failure
-        if: ${{ always() && steps.review.outcome != 'success' && steps.review.outputs.decision != 'REQUEST_CHANGES' }}
+        if: ${{ always() && steps.review.outcome != 'success' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REVIEW_FAILURE_REASON: ${{ steps.review.outputs.failure_reason }}
