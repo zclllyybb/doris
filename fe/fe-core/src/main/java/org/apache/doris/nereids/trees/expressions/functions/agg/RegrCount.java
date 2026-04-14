@@ -19,10 +19,11 @@ package org.apache.doris.nereids.trees.expressions.functions.agg;
 
 import org.apache.doris.catalog.FunctionSignature;
 import org.apache.doris.nereids.trees.expressions.Expression;
-import org.apache.doris.nereids.trees.expressions.functions.AlwaysNullable;
 import org.apache.doris.nereids.trees.expressions.functions.ExplicitlyCastableSignature;
+import org.apache.doris.nereids.trees.expressions.literal.BigIntLiteral;
 import org.apache.doris.nereids.trees.expressions.shape.BinaryExpression;
 import org.apache.doris.nereids.trees.expressions.visitor.ExpressionVisitor;
+import org.apache.doris.nereids.types.BigIntType;
 import org.apache.doris.nereids.types.DoubleType;
 
 import com.google.common.base.Preconditions;
@@ -30,34 +31,39 @@ import com.google.common.collect.ImmutableList;
 
 import java.util.List;
 
-/** regr_sxx agg function. */
-public class RegrSxx extends AggregateFunction
-        implements BinaryExpression, ExplicitlyCastableSignature, AlwaysNullable {
+/** regr_count agg function. */
+public class RegrCount extends NotNullableAggregateFunction
+        implements BinaryExpression, ExplicitlyCastableSignature {
 
     public static final List<FunctionSignature> SIGNATURES = ImmutableList.of(
-            FunctionSignature.ret(DoubleType.INSTANCE).args(DoubleType.INSTANCE, DoubleType.INSTANCE));
+            FunctionSignature.ret(BigIntType.INSTANCE).args(DoubleType.INSTANCE, DoubleType.INSTANCE));
 
-    public RegrSxx(Expression arg0, Expression arg1) {
+    public RegrCount(Expression arg0, Expression arg1) {
         this(false, arg0, arg1);
     }
 
-    public RegrSxx(boolean distinct, Expression arg0, Expression arg1) {
-        super("regr_sxx", distinct, arg0, arg1);
+    public RegrCount(boolean distinct, Expression arg0, Expression arg1) {
+        super("regr_count", distinct, arg0, arg1);
     }
 
-    public RegrSxx(AggregateFunctionParams functionParams) {
+    public RegrCount(AggregateFunctionParams functionParams) {
         super(functionParams);
     }
 
     @Override
-    public RegrSxx withDistinctAndChildren(boolean distinct, List<Expression> children) {
+    public RegrCount withDistinctAndChildren(boolean distinct, List<Expression> children) {
         Preconditions.checkArgument(children.size() == 2);
-        return new RegrSxx(getFunctionParams(distinct, children));
+        return new RegrCount(getFunctionParams(distinct, children));
+    }
+
+    @Override
+    public Expression resultForEmptyInput() {
+        return new BigIntLiteral(0);
     }
 
     @Override
     public <R, C> R accept(ExpressionVisitor<R, C> visitor, C context) {
-        return visitor.visitRegrSxx(this, context);
+        return visitor.visitRegrCount(this, context);
     }
 
     @Override

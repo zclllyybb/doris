@@ -30,34 +30,34 @@ import com.google.common.collect.ImmutableList;
 
 import java.util.List;
 
-/** regr_sxx agg function. */
-public class RegrSxx extends AggregateFunction
+/** regr_r2 agg function. */
+public class RegrR2 extends AggregateFunction
         implements BinaryExpression, ExplicitlyCastableSignature, AlwaysNullable {
 
     public static final List<FunctionSignature> SIGNATURES = ImmutableList.of(
             FunctionSignature.ret(DoubleType.INSTANCE).args(DoubleType.INSTANCE, DoubleType.INSTANCE));
 
-    public RegrSxx(Expression arg0, Expression arg1) {
+    public RegrR2(Expression arg0, Expression arg1) {
         this(false, arg0, arg1);
     }
 
-    public RegrSxx(boolean distinct, Expression arg0, Expression arg1) {
-        super("regr_sxx", distinct, arg0, arg1);
+    public RegrR2(boolean distinct, Expression arg0, Expression arg1) {
+        super("regr_r2", distinct, arg0, arg1);
     }
 
-    public RegrSxx(AggregateFunctionParams functionParams) {
+    public RegrR2(AggregateFunctionParams functionParams) {
         super(functionParams);
     }
 
     @Override
-    public RegrSxx withDistinctAndChildren(boolean distinct, List<Expression> children) {
+    public RegrR2 withDistinctAndChildren(boolean distinct, List<Expression> children) {
         Preconditions.checkArgument(children.size() == 2);
-        return new RegrSxx(getFunctionParams(distinct, children));
+        return new RegrR2(getFunctionParams(distinct, children));
     }
 
     @Override
     public <R, C> R accept(ExpressionVisitor<R, C> visitor, C context) {
-        return visitor.visitRegrSxx(this, context);
+        return visitor.visitRegrR2(this, context);
     }
 
     @Override
