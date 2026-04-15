@@ -296,14 +296,12 @@ struct AggregateFunctionTopNImplWeight {
 };
 
 //base function
-template <typename Impl>
+template <typename Impl, typename Derived>
 class AggregateFunctionTopNBase
-        : public IAggregateFunctionDataHelper<typename Impl::Data,
-                                              AggregateFunctionTopNBase<Impl>> {
+        : public IAggregateFunctionDataHelper<typename Impl::Data, Derived> {
 public:
     AggregateFunctionTopNBase(const DataTypes& argument_types_)
-            : IAggregateFunctionDataHelper<typename Impl::Data, AggregateFunctionTopNBase<Impl>>(
-                      argument_types_) {}
+            : IAggregateFunctionDataHelper<typename Impl::Data, Derived>(argument_types_) {}
 
     void add(AggregateDataPtr __restrict place, const IColumn** columns, ssize_t row_num,
              Arena&) const override {
@@ -329,12 +327,13 @@ public:
 
 //topn function return string
 template <typename Impl>
-class AggregateFunctionTopN final : public AggregateFunctionTopNBase<Impl>,
-                                    MultiExpression,
-                                    NullableAggregateFunction {
+class AggregateFunctionTopN final
+        : public AggregateFunctionTopNBase<Impl, AggregateFunctionTopN<Impl>>,
+          MultiExpression,
+          NullableAggregateFunction {
 public:
     AggregateFunctionTopN(const DataTypes& argument_types_)
-            : AggregateFunctionTopNBase<Impl>(argument_types_) {}
+            : AggregateFunctionTopNBase<Impl, AggregateFunctionTopN<Impl>>(argument_types_) {}
 
     String get_name() const override { return "topn"; }
 
@@ -348,12 +347,13 @@ public:
 
 //topn function return array
 template <typename Impl>
-class AggregateFunctionTopNArray final : public AggregateFunctionTopNBase<Impl>,
-                                         MultiExpression,
-                                         NullableAggregateFunction {
+class AggregateFunctionTopNArray final
+        : public AggregateFunctionTopNBase<Impl, AggregateFunctionTopNArray<Impl>>,
+          MultiExpression,
+          NullableAggregateFunction {
 public:
     AggregateFunctionTopNArray(const DataTypes& argument_types_)
-            : AggregateFunctionTopNBase<Impl>(argument_types_),
+            : AggregateFunctionTopNBase<Impl, AggregateFunctionTopNArray<Impl>>(argument_types_),
               _argument_type(argument_types_[0]) {}
 
     String get_name() const override { return Impl::get_name(); }
