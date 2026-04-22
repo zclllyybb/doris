@@ -76,35 +76,59 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          gh api --paginate --slurp repos/${REPO}/pulls/${PR_NUMBER}/comments > /tmp/pr_review_comments_pages.json
-          jq 'add | sort_by(.id)' /tmp/pr_review_comments_pages.json > /tmp/pr_review_comments.json
-          jq -r '
-            if length == 0 then
-              "No existing inline review comments or replies were found for this PR."
-            else
-              group_by(.in_reply_to_id // .id)
-              | map(
-                  . as $thread
-                  | $thread[0] as $root
-                  | "### " + ($root.path // "(unknown path)") + ":" + (($root.line // $root.original_line // "n/a") | tostring)
-                  + "\nURL: " + ($root.html_url // "")
-                  + (if ($root.diff_hunk // "") != "" then "\nDiff hunk:\n```diff\n" + $root.diff_hunk + "\n```" else "" end)
-                  + "\nComments:\n"
-                  + (
-                      $thread
-                      | map(
-                          "- " + (.user.login // "unknown")
-                          + " at " + (.created_at // "")
-                          + (if .in_reply_to_id then " (reply):" else " (original comment):" end)
-                          + "\n"
-                          + ((.body // "") | split("\n") | map("    " + .) | join("\n"))
-                        )
-                      | join("\n")
-                    )
+          MAX_THREADS=30
+          MAX_BODY_CHARS=1200
+
+          if gh api --paginate --slurp repos/${REPO}/pulls/${PR_NUMBER}/comments > /tmp/pr_review_comments_pages.json 2>/tmp/pr_review_comments_error.log \
+            && jq 'add | sort_by((.in_reply_to_id // .id), .id)' /tmp/pr_review_comments_pages.json > /tmp/pr_review_comments.json 2>>/tmp/pr_review_comments_error.log \
+            && jq -r '
+              def shorten($limit):
+                if (. // "" | length) > $limit then
+                  .[0:$limit] + "...(truncated)"
+                else
+                  . // ""
+                end;
+              if length == 0 then
+                "No existing inline review comments or replies were found for this PR."
+              else
+                group_by(.in_reply_to_id // .id)
+                | sort_by(.[0].created_at // "")
+                | reverse
+                | .[:$max_threads]
+                | map(
+                    . as $thread
+                    | $thread[0] as $root
+                    | "### " + ($root.path // "(unknown path)") + ":" + (($root.line // $root.original_line // "n/a") | tostring)
+                    + "\nURL: " + ($root.html_url // "")
+                    + "\nComments:\n"
+                    + (
+                        $thread
+                        | map(
+                            "- " + (.user.login // "unknown")
+                            + " at " + (.created_at // "")
+                            + (if .in_reply_to_id then " (reply):" else " (original comment):" end)
+                            + "\n"
+                            + ((.body | shorten($max_body_chars)) | split("\n") | map("    " + .) | join("\n"))
+                          )
+                        | join("\n")
+                      )
                 )
-              | join("\n\n")
-            end
-          ' /tmp/pr_review_comments.json > /tmp/pr_review_threads.md
+                | join("\n\n")
+              end
+            ' --argjson max_threads "$MAX_THREADS" --argjson max_body_chars "$MAX_BODY_CHARS" /tmp/pr_review_comments.json > /tmp/pr_review_threads.md 2>>/tmp/pr_review_comments_error.log; then
+            echo "Fetched existing PR review threads successfully."
+          else
+            printf '%s\n\n' \
+              'Existing PR review threads could not be fetched or formatted for this run.' \
+              'Proceed with the automated review without this auxiliary context.' \
+              > /tmp/pr_review_threads.md
+            if [ -s /tmp/pr_review_comments_error.log ]; then
+              {
+                printf '\n%s\n' 'Fetch/format error details:'
+                sed 's/^/    /' /tmp/pr_review_comments_error.log
+              } >> /tmp/pr_review_threads.md
+            fi
+          fi
 
       - name: Prepare user review focus
         env:

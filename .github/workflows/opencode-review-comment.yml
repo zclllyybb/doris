@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '/review')
+      startsWith(github.event.comment.body, '/review')
     outputs:
       pr_number: ${{ steps.pr.outputs.pr_number }}
       head_sha: ${{ steps.pr.outputs.head_sha }}
@@ -28,11 +28,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          printf '%s\n' "$COMMENT_BODY" > /tmp/review_comment_body.txt
           PR_JSON=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }})
           HEAD_SHA=$(echo "$PR_JSON" | jq -r '.head.sha')
           BASE_SHA=$(echo "$PR_JSON" | jq -r '.base.sha')
-          REVIEW_FOCUS="${COMMENT_BODY#*/review}"
+          REVIEW_FOCUS=$(printf '%s' "${COMMENT_BODY#'/review'}" | sed 's/^[[:space:]]*//')
 
           echo "pr_number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
@@ -49,7 +48,7 @@ jobs:
       - mark-review-pending
     if: >-
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '/review')
+      startsWith(github.event.comment.body, '/review')
     uses: ./.github/workflows/opencode-review-runner.yml
     secrets: inherit
     with:
@@ -63,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '/review')
+      startsWith(github.event.comment.body, '/review')
     steps:
       - name: Mark Code Review status as pending
         env:
