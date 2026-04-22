@@ -116,10 +116,9 @@ inline bool match_ipv4_subnet(uint32_t addr, uint32_t cidr_addr, uint8_t prefix)
 #if defined(__SSE2__) || defined(__aarch64__)
 
 inline bool match_ipv6_subnet(const uint8_t* addr, const uint8_t* cidr_addr, uint8_t prefix) {
-    uint16_t mask = (uint16_t)_mm_movemask_epi8(
+    uint16_t mask = static_cast<uint16_t>(~static_cast<uint16_t>(_mm_movemask_epi8(
             _mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(addr)),
-                           _mm_loadu_si128(reinterpret_cast<const __m128i*>(cidr_addr))));
-    mask = ~mask;
+                           _mm_loadu_si128(reinterpret_cast<const __m128i*>(cidr_addr))))));
 
     if (mask) {
         const auto offset = std::countl_zero(mask);
