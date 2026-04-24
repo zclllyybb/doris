@@ -174,6 +174,10 @@ public class StreamingInsertJob extends AbstractJob<StreamingJobSchedulerTask, M
     private long sampleWindowScannedRows;
     private long sampleWindowFilteredRows;
 
+    protected StreamingInsertJob() {
+        // for testing and gson deserialization
+    }
+
     public StreamingInsertJob(String jobName,
             JobStatus jobStatus,
             String dbName,
@@ -1265,6 +1269,16 @@ public class StreamingInsertJob extends AbstractJob<StreamingJobSchedulerTask, M
             return;
         }
 
+        // Roll the window before accumulating, otherwise a boundary batch is merged into the expired window.
+        long now = System.currentTimeMillis();
+        if ((now - sampleStartTime) > sampleWindowMs) {
+            this.sampleStartTime = now;
+            this.sampleWindowScannedRows = 0L;
+            this.sampleWindowFilteredRows = 0L;
+            log.info("streaming multi table job {} enter next sample window, startTime={}",
+                    getJobId(), TimeUtils.longToTimeString(sampleStartTime));
+        }
+
         this.sampleWindowScannedRows += offsetRequest.getScannedRows();
         this.sampleWindowFilteredRows += offsetRequest.getFilteredRows();
 
@@ -1286,16 +1300,6 @@ public class StreamingInsertJob extends AbstractJob<StreamingJobSchedulerTask, M
             this.setFailureReason(failureReason);
             this.updateJobStatus(JobStatus.PAUSED);
             throw new JobException(failureReason.getMsg());
-        }
-
-        long now = System.currentTimeMillis();
-
-        if ((now - sampleStartTime) > sampleWindowMs) {
-            this.sampleStartTime = now;
-            this.sampleWindowScannedRows = 0L;
-            this.sampleWindowFilteredRows = 0L;
-            log.info("streaming multi table job {} enter next sample window, startTime={}",
-                    getJobId(), TimeUtils.longToTimeString(sampleStartTime));
         }
     }
 
