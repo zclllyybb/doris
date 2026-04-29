@@ -502,6 +502,29 @@ Status ColumnReader::prune_predicates_by_zone_map(
 Status ColumnReader::_parse_zone_map(const ZoneMapPB& zone_map, ZoneMapInfo& zone_map_info) const {
     zone_map_info.has_null = zone_map.has_null();
     zone_map_info.is_all_null = !zone_map.has_not_null();
+    auto parse_zonemap_value = [this, &zone_map](const std::string& value,
+                                                 vectorized::Field& field) {
+        vectorized::DataTypeSerDe::FormatOptions opt;
+        opt.ignore_scale = true;
+        auto st = _data_type->get_serde()->from_olap_string(value, field, opt);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to parse column zone map value"
+                         << ", status=" << st.to_string_no_stack()
+                         << ", file=" << _file_reader->path().native()
+                         << ", field_type=" << TabletColumn::get_string_by_field_type(_meta_type)
+                         << ", vec_type=" << _data_type->get_name()
+                         << ", zone_map_value='" << value << "'"
+                         << ", zone_map_min='" << zone_map.min() << "'"
+                         << ", zone_map_max='" << zone_map.max() << "'"
+                         << ", has_null=" << zone_map.has_null()
+                         << ", has_not_null=" << zone_map.has_not_null()
+                         << ", pass_all=" << zone_map.pass_all()
+                         << ", has_negative_inf=" << zone_map.has_negative_inf()
+                         << ", has_positive_inf=" << zone_map.has_positive_inf()
+                         << ", has_nan=" << zone_map.has_nan();
+        }
+        return st;
+    };
     // min value and max value are valid if has_not_null is true
     if (zone_map.has_not_null()) {
         if (zone_map.has_negative_inf()) {
@@ -517,10 +540,7 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zone_map, ZoneMapInfo& zon
                 return Status::InternalError("invalid zone map with negative Infinity");
             }
         } else {
-            vectorized::DataTypeSerDe::FormatOptions opt;
-            opt.ignore_scale = true;
-            RETURN_IF_ERROR(_data_type->get_serde()->from_olap_string(
-                    zone_map.min(), zone_map_info.min_value, opt));
+            RETURN_IF_ERROR(parse_zonemap_value(zone_map.min(), zone_map_info.min_value));
         }
 
         if (zone_map.has_nan()) {
@@ -546,10 +566,7 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zone_map, ZoneMapInfo& zon
                 return Status::InternalError("invalid zone map with positive Infinity");
             }
         } else {
-            vectorized::DataTypeSerDe::FormatOptions opt;
-            opt.ignore_scale = true;
-            RETURN_IF_ERROR(_data_type->get_serde()->from_olap_string(
-                    zone_map.max(), zone_map_info.max_value, opt));
+            RETURN_IF_ERROR(parse_zonemap_value(zone_map.max(), zone_map_info.max_value));
         }
     }
     return Status::OK();

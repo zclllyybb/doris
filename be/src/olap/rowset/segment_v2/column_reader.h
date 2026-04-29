@@ -182,6 +182,9 @@ public:
     const EncodingInfo* encoding_info() const { return _encoding_info; }
 
     bool has_zone_map() const { return _zone_map_index != nullptr; }
+    FieldType meta_type() const { return _meta_type; }
+    std::string data_type_name() const { return _data_type->get_name(); }
+    const std::string& file_path() const { return _file_reader->path().native(); }
     bool has_bloom_filter_index(bool ngram) const;
     // Check if this column could match `cond' using segment zone map.
     // Since segment zone map is stored in metadata, this function is fast without I/O.

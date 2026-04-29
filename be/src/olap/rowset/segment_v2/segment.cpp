@@ -304,8 +304,32 @@ Status Segment::new_iterator(SchemaSPtr schema, const StorageReadOptions& read_o
             const auto uid = it.first;
             const auto column_id = read_options.tablet_schema->field_index(uid);
             bool tmp_pruned = false;
-            RETURN_IF_ERROR(it.second->prune_predicates_by_zone_map(pruned_predicates, column_id,
-                                                                    &tmp_pruned));
+            auto st = it.second->prune_predicates_by_zone_map(pruned_predicates, column_id,
+                                                              &tmp_pruned);
+            if (!st.ok()) {
+                std::string column_name = "<unknown>";
+                std::string schema_type = "<unknown>";
+                if (column_id >= 0 && column_id < read_options.tablet_schema->num_columns()) {
+                    const auto& column = read_options.tablet_schema->column(column_id);
+                    column_name = column.name();
+                    schema_type = TabletColumn::get_string_by_field_type(column.type());
+                }
+                LOG(WARNING) << "failed to prune predicates by cached column zone map"
+                             << ", status=" << st.to_string_no_stack()
+                             << ", tablet_id=" << read_options.tablet_id
+                             << ", rowset_id=" << _rowset_id.to_string()
+                             << ", segment_id=" << _segment_id
+                             << ", file=" << it.second->file_path()
+                             << ", column_uid=" << uid
+                             << ", column_id=" << column_id
+                             << ", column_name=" << column_name
+                             << ", schema_type=" << schema_type
+                             << ", reader_field_type="
+                             << TabletColumn::get_string_by_field_type(it.second->meta_type())
+                             << ", reader_vec_type=" << it.second->data_type_name()
+                             << ", predicate_count=" << pruned_predicates.size();
+                return st;
+            }
             pruned |= tmp_pruned;
         }
 

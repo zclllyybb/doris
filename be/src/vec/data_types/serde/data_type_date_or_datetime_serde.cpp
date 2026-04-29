@@ -389,7 +389,7 @@ Status DataTypeDateSerDe<T>::from_string(StringRef& str, IColumn& column,
     // Exception!
     if (!CastToDateOrDatetime::from_string_non_strict_mode<IsDatetime>(str, res, options.timezone,
                                                                        params)) [[unlikely]] {
-        return Status::InvalidArgument("parse date or datetime fail, string: '{}'",
+        return Status::InternalError("parse date or datetime fail, string: '{}'",
                                        str.to_string());
     }
     col_data.insert_value(res);
@@ -408,7 +408,7 @@ Status DataTypeDateSerDe<T>::from_olap_string(const std::string& str, Field& fie
     // Exception!
     if (!CastToDateOrDatetime::from_string_non_strict_mode<IsDatetime>(
                 StringRef(str), res, options.timezone, params)) [[unlikely]] {
-        return Status::InvalidArgument("parse date or datetime fail, string: '{}'", str);
+        return Status::InternalError("parse date or datetime fail, string: '{}'", str);
     }
     field = Field::create_field<T>(std::move(res));
     return Status::OK();
