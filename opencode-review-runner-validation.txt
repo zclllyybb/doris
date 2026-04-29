@@ -1,0 +1,2 @@
+OpenCode review runner validation file.
+This PR exists only to verify the review workflow can read repository-local context files.
