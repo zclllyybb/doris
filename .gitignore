@@ -151,3 +151,8 @@ compile_commands.json
 .github
 
 .worktrees/
+
+.windsurf
+output*/
+debug/**
+ 
