@@ -347,6 +347,7 @@ jobs:
             --model "gpt-5.5" \
             --reasoning-effort "$REASONING_EFFORT" \
             --environment "github-actions" \
+            --max-payload-bytes 4000000 \
             --min-observations 4 \
             --min-step-observations 2 \
             --verify-attempts 24 \
