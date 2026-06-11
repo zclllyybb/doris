@@ -97,8 +97,6 @@ OlapScanner::OlapScanner(ScanLocalStateBase* parent, OlapScanner::Params&& param
                                  .topn_filter_source_node_ids {},
                                  .key_group_cluster_key_idxes {},
                                  .virtual_column_exprs {},
-                                 .vir_cid_to_idx_in_block {},
-                                 .vir_col_idx_to_type {},
                                  .score_runtime {},
                                  .collection_statistics {},
                                  .ann_topn_runtime {},
@@ -180,8 +178,6 @@ Status OlapScanner::_prepare_impl() {
         _slot_id_to_virtual_column_expr[pair.first] = context;
     }
 
-    _slot_id_to_index_in_block = local_state->_slot_id_to_index_in_block;
-    _slot_id_to_col_type = local_state->_slot_id_to_col_type;
     _score_runtime = local_state->_score_runtime;
     // All scanners share the same ann_topn_runtime.
     _ann_topn_runtime = local_state->_ann_topn_runtime;
@@ -398,8 +394,6 @@ Status OlapScanner::_init_tablet_reader_params(
 
     _tablet_reader_params.common_expr_ctxs_push_down = _common_expr_ctxs_push_down;
     _tablet_reader_params.virtual_column_exprs = _virtual_column_exprs;
-    _tablet_reader_params.vir_cid_to_idx_in_block = _vir_cid_to_idx_in_block;
-    _tablet_reader_params.vir_col_idx_to_type = _vir_col_idx_to_type;
     _tablet_reader_params.score_runtime = _score_runtime;
     _tablet_reader_params.output_columns = ((OlapScanLocalState*)_local_state)->_output_column_ids;
     _tablet_reader_params.ann_topn_runtime = _ann_topn_runtime;
@@ -718,14 +712,9 @@ Status OlapScanner::_init_return_columns() {
         if (slot->get_virtual_column_expr()) {
             ColumnId virtual_column_cid = index;
             _virtual_column_exprs[virtual_column_cid] = _slot_id_to_virtual_column_expr[slot->id()];
-            size_t idx_in_block = _slot_id_to_index_in_block[slot->id()];
-            _vir_cid_to_idx_in_block[virtual_column_cid] = idx_in_block;
-            _vir_col_idx_to_type[idx_in_block] = _slot_id_to_col_type[slot->id()];
 
-            VLOG_DEBUG << fmt::format(
-                    "Virtual column, slot id: {}, cid {}, column index: {}, type: {}", slot->id(),
-                    virtual_column_cid, _vir_cid_to_idx_in_block[virtual_column_cid],
-                    _vir_col_idx_to_type[idx_in_block]->get_name());
+            VLOG_DEBUG << fmt::format("Virtual column, slot id: {}, cid {}, type: {}", slot->id(),
+                                      virtual_column_cid, slot->get_data_type_ptr()->get_name());
         }
 
         const auto& column = tablet_schema->column(index);

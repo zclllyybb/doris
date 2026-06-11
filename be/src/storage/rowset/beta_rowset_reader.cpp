@@ -108,8 +108,6 @@ Status BetaRowsetReader::get_segment_iterators(RowsetReaderContext* read_context
     _read_options.predicate_access_paths = _read_context->predicate_access_paths;
 
     _read_options.ann_topn_runtime = _read_context->ann_topn_runtime;
-    _read_options.vir_cid_to_idx_in_block = _read_context->vir_cid_to_idx_in_block;
-    _read_options.vir_col_idx_to_type = _read_context->vir_col_idx_to_type;
     _read_options.score_runtime = _read_context->score_runtime;
     _read_options.collection_statistics = _read_context->collection_statistics;
     _read_options.rowset_id = _rowset->rowset_id();

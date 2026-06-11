@@ -290,8 +290,8 @@ private:
 
     bool _check_apply_by_inverted_index(std::shared_ptr<ColumnPredicate> pred);
 
-    void _output_index_result_column(const std::vector<VExprContext*>& expr_ctxs,
-                                     uint16_t* sel_rowid_idx, uint16_t select_size);
+    void _output_index_result_column(const VExprContextSPtrs& expr_ctxs, uint16_t* sel_rowid_idx,
+                                     uint16_t select_size);
 
     bool _need_read_data(ColumnId cid);
     void _fill_default_column(MutableColumnPtr& column, size_t num_of_defaults);
@@ -474,7 +474,6 @@ private:
 
     // cid to virtual column expr
     std::map<ColumnId, VExprContextSPtr> _virtual_column_exprs;
-    std::map<ColumnId, size_t> _vir_cid_to_idx_in_block;
 
     IndexQueryContextPtr _index_query_context;
 

@@ -95,8 +95,6 @@ struct RowsetReaderContext {
     int64_t ttl_seconds = 0;
 
     std::map<ColumnId, VExprContextSPtr> virtual_column_exprs;
-    std::map<ColumnId, size_t> vir_cid_to_idx_in_block;
-    std::map<size_t, DataTypePtr> vir_col_idx_to_type;
 
     std::map<int32_t, TColumnAccessPaths> all_access_paths;
     std::map<int32_t, TColumnAccessPaths> predicate_access_paths;
