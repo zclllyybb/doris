@@ -374,6 +374,7 @@ Status OlapScanner::_init_tablet_reader_params(
                                              push_down_agg_type != TPushAggOp::COUNT_ON_INDEX);
     }
 
+    _tablet_reader_params.filled_columns.clear();
     RETURN_IF_ERROR(_init_variant_columns());
     RETURN_IF_ERROR(_init_return_columns());
 
@@ -491,7 +492,6 @@ Status OlapScanner::_init_tablet_reader_params(
         }
     } else if (_tablet_reader_params.direct_mode) {
         _tablet_reader_params.return_columns = _return_columns;
-        _tablet_reader_params.filled_columns = _filled_columns;
     } else {
         // we need to fetch all key columns to do the right aggregation on storage engine side.
         for (size_t i = 0; i < tablet_schema->num_key_columns(); ++i) {
@@ -723,7 +723,9 @@ Status OlapScanner::_init_return_columns() {
         if (olap_scan_node.__isset.filled_key_column_slot_ids &&
             olap_scan_node.filled_key_column_slot_ids.contains(slot->id())) {
             DORIS_CHECK(column.is_key());
-            _filled_columns.insert(index);
+            if (_tablet_reader_params.direct_mode) {
+                _tablet_reader_params.filled_columns.insert(index);
+            }
         }
         int32_t unique_id =
                 column.unique_id() >= 0 ? column.unique_id() : column.parent_unique_id();

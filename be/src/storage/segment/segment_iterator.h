@@ -18,9 +18,9 @@
 #pragma once
 
 #include <gen_cpp/Exprs_types.h>
-#include <stddef.h>
-#include <stdint.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -295,10 +295,7 @@ private:
 
     bool _need_read_data(ColumnId cid);
     void _fill_default_column(MutableColumnPtr& column, size_t num_of_defaults);
-    bool _fill_filled_column(ColumnId cid, MutableColumnPtr& column, bool fill_defaults,
-                             size_t num_of_defaults);
-    bool _prune_column(ColumnId cid, MutableColumnPtr& column, bool fill_defaults,
-                       size_t num_of_defaults);
+    bool _prune_column(ColumnId cid, MutableColumnPtr& column, size_t num_of_defaults);
 
     Status _construct_compound_expr_context();
 
@@ -307,7 +304,7 @@ private:
         for (auto cid : col_ids) {
             auto ord = key.field(cid) <=> (*_seek_block[cid])[0];
             if (ord != std::strong_ordering::equal) {
-                return ord < 0 ? -1 : 1;
+                return ord == std::strong_ordering::less ? -1 : 1;
             }
         }
         return 0;

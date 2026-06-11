@@ -17,7 +17,6 @@
 
 #include "storage/segment/segment_iterator.h"
 
-#include <assert.h>
 #include <gen_cpp/Exprs_types.h>
 #include <gen_cpp/Opcodes_types.h>
 #include <gen_cpp/Types_types.h>
@@ -25,6 +24,7 @@
 
 #include <algorithm>
 #include <boost/iterator/iterator_facade.hpp>
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <numeric>
@@ -2092,34 +2092,16 @@ void SegmentIterator::_fill_default_column(MutableColumnPtr& column, size_t num_
     }
 }
 
-bool SegmentIterator::_fill_filled_column(ColumnId cid, MutableColumnPtr& column,
-                                          bool fill_defaults, size_t num_of_defaults) {
-    if (!_opts.filled_columns.contains(cid)) {
-        return false;
-    }
-    DORIS_CHECK(!_virtual_column_exprs.contains(cid));
-    DORIS_CHECK(!_has_delete_predicate(cid));
-    DORIS_CHECK(cid < _is_pred_column.size());
-    DORIS_CHECK(!_is_pred_column[cid]);
-    DORIS_CHECK(cid < _is_common_expr_column.size());
-    DORIS_CHECK(!_is_common_expr_column[cid]);
-    if (fill_defaults) {
-        _fill_default_column(column, num_of_defaults);
-    }
-    return true;
-}
-
-bool SegmentIterator::_prune_column(ColumnId cid, MutableColumnPtr& column, bool fill_defaults,
+bool SegmentIterator::_prune_column(ColumnId cid, MutableColumnPtr& column,
                                     size_t num_of_defaults) {
-    if (_fill_filled_column(cid, column, fill_defaults, num_of_defaults)) {
+    if (_opts.filled_columns.contains(cid)) {
+        _fill_default_column(column, num_of_defaults);
         return true;
     }
     if (_need_read_data(cid)) {
         return false;
     }
-    if (fill_defaults) {
-        _fill_default_column(column, num_of_defaults);
-    }
+    _fill_default_column(column, num_of_defaults);
     return true;
 }
 
@@ -2128,7 +2110,7 @@ Status SegmentIterator::_read_columns(const std::vector<ColumnId>& column_ids,
     for (auto cid : column_ids) {
         auto& column = column_block[cid];
         size_t rows_read = nrows;
-        if (_prune_column(cid, column, true, rows_read)) {
+        if (_prune_column(cid, column, rows_read)) {
             continue;
         }
         RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&rows_read, column));
@@ -2285,7 +2267,7 @@ Status SegmentIterator::_read_columns_by_index(uint32_t nrows_read_limit, uint16
                 VLOG_DEBUG << fmt::format("Column {} no need to read.", cid);
                 continue;
             }
-            if (_prune_column(cid, column, true, nrows_read)) {
+            if (_prune_column(cid, column, nrows_read)) {
                 VLOG_DEBUG << fmt::format("Column {} is pruned. No need to read data.", cid);
                 continue;
             }
@@ -2668,7 +2650,7 @@ Status SegmentIterator::_read_columns_by_rowids(std::vector<ColumnId>& read_colu
         if (_no_need_read_key_data(cid, colunm, select_size)) {
             continue;
         }
-        if (_prune_column(cid, colunm, true, select_size)) {
+        if (_prune_column(cid, colunm, select_size)) {
             continue;
         }
 
