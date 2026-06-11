@@ -413,7 +413,7 @@ Status SegmentIterator::_init_impl(const StorageReadOptions& opts) {
     _vir_cid_to_idx_in_block = _opts.vir_cid_to_idx_in_block;
     _score_runtime = _opts.score_runtime;
     _ann_topn_runtime = _opts.ann_topn_runtime;
-    _init_column_id_mappings();
+    _init_schema_block_id_map();
 
     if (opts.output_columns != nullptr) {
         _output_columns = *(opts.output_columns);
@@ -476,49 +476,6 @@ void SegmentIterator::_init_schema_block_id_map() {
     for (int i = 0; i < _schema->num_column_ids(); i++) {
         auto cid = _schema->column_id(i);
         _schema_block_id_map[cid] = i;
-    }
-}
-
-void SegmentIterator::_init_column_id_mappings() {
-    _init_schema_block_id_map();
-    // Direct Segment::new_iterator callers use the input schema as the expression slot layout.
-    const auto* expr_column_ids =
-            _opts.expr_column_ids != nullptr ? _opts.expr_column_ids : &_schema->column_ids();
-    _expr_column_ids =
-            *expr_column_ids == _schema->column_ids() ? &_schema->column_ids() : expr_column_ids;
-}
-
-const std::vector<ColumnId>& SegmentIterator::_expr_column_ids_ref() const {
-    DORIS_CHECK(_expr_column_ids != nullptr);
-    return *_expr_column_ids;
-}
-
-ColumnId SegmentIterator::_expr_column_id(size_t ordinal) const {
-    const auto& expr_column_ids = _expr_column_ids_ref();
-    DORIS_CHECK(ordinal < expr_column_ids.size());
-    return expr_column_ids[ordinal];
-}
-
-bool SegmentIterator::_expr_column_ids_match_schema() const {
-    return _expr_column_ids == &_schema->column_ids();
-}
-
-void SegmentIterator::_build_expr_block(Block* block, Block* expr_block) {
-    DORIS_CHECK(!_expr_column_ids_match_schema());
-
-    expr_block->clear();
-    for (auto cid : _expr_column_ids_ref()) {
-        auto loc = _schema_block_id_map[cid];
-        auto& output_column = block->get_by_position(loc);
-        auto type = output_column.type;
-        auto column = output_column.column;
-        auto virtual_it = _vir_cid_to_idx_in_block.find(cid);
-        if (virtual_it != _vir_cid_to_idx_in_block.end()) {
-            auto type_it = _opts.vir_col_idx_to_type.find(virtual_it->second);
-            DORIS_CHECK(type_it != _opts.vir_col_idx_to_type.end());
-            type = type_it->second;
-        }
-        expr_block->insert({std::move(column), type, _schema->column(cid)->name()});
     }
 }
 
@@ -933,8 +890,8 @@ Status SegmentIterator::_apply_ann_topn_predicate() {
 
     VLOG_DEBUG << fmt::format("Try apply ann topn: {}", _ann_topn_runtime->debug_string());
     size_t src_col_idx = _ann_topn_runtime->get_src_column_idx();
-    // AnnTopNRuntime keeps VSlotRef::column_id(), which is the expression block ordinal.
-    ColumnId src_cid = _expr_column_id(src_col_idx);
+    // AnnTopNRuntime keeps VSlotRef::column_id(), which is the scan schema ordinal.
+    ColumnId src_cid = _schema->column_id(src_col_idx);
     IndexIterator* ann_index_iterator = _index_iterators[src_cid].get();
     bool has_ann_index = _column_has_ann_index(src_cid);
     bool has_common_expr_push_down = !_common_expr_ctxs_push_down.empty();
@@ -1055,7 +1012,7 @@ Status SegmentIterator::_apply_ann_topn_predicate() {
     _opts.stats->ann_index_topn_search_cnt += 1;
     _opts.stats->ann_index_cache_hits += ann_index_stats.topn_cache_hits.value();
     const size_t dst_col_idx = _ann_topn_runtime->get_dest_column_idx();
-    ColumnIterator* column_iter = _column_iterators[_expr_column_id(dst_col_idx)].get();
+    ColumnIterator* column_iter = _column_iterators[_schema->column_id(dst_col_idx)].get();
     DCHECK(column_iter != nullptr);
     VirtualColumnIterator* virtual_column_iter = dynamic_cast<VirtualColumnIterator*>(column_iter);
     DCHECK(virtual_column_iter != nullptr);
@@ -1206,7 +1163,7 @@ Status SegmentIterator::_extract_common_expr_columns(const VExprSPtr& expr) {
     auto node_type = expr->node_type();
     if (node_type == TExprNodeType::SLOT_REF) {
         auto slot_expr = std::dynamic_pointer_cast<doris::VSlotRef>(expr);
-        auto cid = _expr_column_id(slot_expr->column_id());
+        auto cid = _schema->column_id(slot_expr->column_id());
         _is_common_expr_column[cid] = true;
         _common_expr_columns.insert(cid);
     } else if (node_type == TExprNodeType::VIRTUAL_SLOT_REF) {
@@ -1309,7 +1266,7 @@ Status SegmentIterator::_apply_index_expr() {
         size_t origin_rows = _row_bitmap.cardinality();
         bool ann_range_search_executed = false;
         RETURN_IF_ERROR(expr_ctx->evaluate_ann_range_search(
-                _index_iterators, _expr_column_ids_ref(), _column_iterators,
+                _index_iterators, _schema->column_ids(), _column_iterators,
                 _common_expr_to_slotref_map, _row_bitmap, ann_index_stats,
                 enable_ann_index_result_cache, &ann_range_search_executed));
         if (ann_range_search_executed) {
@@ -3126,12 +3083,6 @@ Status SegmentIterator::_execute_common_expr(uint16_t* sel_rowid_idx, uint16_t& 
                                              Block* block) {
     SCOPED_RAW_TIMER(&_opts.stats->expr_filter_ns);
     DCHECK(!_common_expr_ctxs_push_down.empty());
-    Block expr_layout_block;
-    Block* expr_block = block;
-    if (!_expr_column_ids_match_schema()) {
-        _build_expr_block(block, &expr_layout_block);
-        expr_block = &expr_layout_block;
-    }
     std::vector<VExprContext*> common_ctxs;
     common_ctxs.reserve(_common_expr_ctxs_push_down.size());
     for (auto& ctx : _common_expr_ctxs_push_down) {
@@ -3145,8 +3096,8 @@ Status SegmentIterator::_execute_common_expr(uint16_t* sel_rowid_idx, uint16_t& 
     IColumn::Filter filter(selected_size, 1);
     bool can_filter_all = false;
     for (const auto& ctx : _common_expr_ctxs_push_down) {
-        RETURN_IF_ERROR(ctx->execute_filter(expr_block, filter.data(), selected_size, false,
-                                            &can_filter_all));
+        RETURN_IF_ERROR(
+                ctx->execute_filter(block, filter.data(), selected_size, false, &can_filter_all));
         if (can_filter_all) {
             break;
         }
@@ -3314,7 +3265,7 @@ Status SegmentIterator::_construct_compound_expr_context() {
             .io_ctx = _opts.io_ctx,
     };
     auto inverted_index_context = std::make_shared<IndexExecContext>(
-            _expr_column_ids_ref(), _index_iterators, _storage_name_and_type,
+            _schema->column_ids(), _index_iterators, _storage_name_and_type,
             _common_expr_index_exec_status, _score_runtime, _segment.get(), iter_opts);
     inverted_index_context->set_index_query_context(_index_query_context);
     for (const auto& expr_ctx : _opts.common_expr_ctxs_push_down) {
@@ -3371,7 +3322,7 @@ void SegmentIterator::_calculate_common_expr_index_exec_status() {
                             for (const auto& vir_child : vir_node->children()) {
                                 if (vir_child->is_slot_ref()) {
                                     auto* inner_slot_ref = assert_cast<VSlotRef*>(vir_child.get());
-                                    auto cid = _expr_column_id(inner_slot_ref->column_id());
+                                    auto cid = _schema->column_id(inner_slot_ref->column_id());
                                     _common_expr_index_exec_status[cid][expr.get()] = false;
                                     _common_expr_to_slotref_map[root_expr_ctx.get()]
                                                                [inner_slot_ref->column_id()] =
@@ -3389,7 +3340,7 @@ void SegmentIterator::_calculate_common_expr_index_exec_status() {
                 auto expr_without_cast = VExpr::expr_without_cast(child);
                 if (expr_without_cast->is_slot_ref() && expr->op() != TExprOpcode::CAST) {
                     auto* column_slot_ref = assert_cast<VSlotRef*>(expr_without_cast.get());
-                    auto cid = _expr_column_id(column_slot_ref->column_id());
+                    auto cid = _schema->column_id(column_slot_ref->column_id());
                     _common_expr_index_exec_status[cid][expr.get()] = false;
                     _common_expr_to_slotref_map[root_expr_ctx.get()][column_slot_ref->column_id()] =
                             expr.get();
@@ -3516,41 +3467,23 @@ Status SegmentIterator::_materialization_of_virtual_column(Block* block) {
         return Status::OK();
     }
 
-    Block expr_layout_block;
-    const bool materialize_on_expr_block = !_expr_column_ids_match_schema();
-    Block* materialize_block = block;
-    if (materialize_on_expr_block) {
-        _build_expr_block(block, &expr_layout_block);
-        materialize_block = &expr_layout_block;
-    }
     for (const auto& cid_and_expr : _virtual_column_exprs) {
         auto cid = cid_and_expr.first;
         auto column_expr = cid_and_expr.second;
-        auto materialized_pos = materialize_on_expr_block ? _vir_cid_to_idx_in_block.at(cid)
-                                                          : _schema_block_id_map[cid];
-        auto& column = materialize_block->get_by_position(materialized_pos).column;
+        auto materialized_pos = _schema_block_id_map[cid];
+        auto& column = block->get_by_position(materialized_pos).column;
         if (check_and_get_column<const ColumnNothing>(column.get())) {
             VLOG_DEBUG << fmt::format("Virtual column is doing materialization, cid {}, col idx {}",
                                       cid, materialized_pos);
             ColumnPtr result_column;
             Status st;
             RETURN_IF_CATCH_EXCEPTION({
-                st = column_expr->root()->execute_column(column_expr.get(), materialize_block,
-                                                         nullptr, _selected_size, result_column);
+                st = column_expr->root()->execute_column(column_expr.get(), block, nullptr,
+                                                         _selected_size, result_column);
             });
             RETURN_IF_ERROR(st);
 
-            materialize_block->replace_by_position(materialized_pos, std::move(result_column));
-        }
-    }
-    if (materialize_on_expr_block) {
-        for (const auto& cid_and_expr : _virtual_column_exprs) {
-            auto cid = cid_and_expr.first;
-            auto idx_in_block = _schema_block_id_map[cid];
-            auto materialized_pos = _vir_cid_to_idx_in_block.at(cid);
-            const auto& column = expr_layout_block.get_by_position(materialized_pos).column;
-            DORIS_CHECK(!check_and_get_column<const ColumnNothing>(column.get()));
-            block->replace_by_position(idx_in_block, column);
+            block->replace_by_position(materialized_pos, std::move(result_column));
         }
     }
     return Status::OK();
@@ -3580,7 +3513,7 @@ void SegmentIterator::_prepare_score_column_materialization() {
                                                                      result_row_ids, filter);
     }
     const size_t dst_col_idx = _score_runtime->get_dest_column_idx();
-    auto* column_iter = _column_iterators[_expr_column_id(dst_col_idx)].get();
+    auto* column_iter = _column_iterators[_schema->column_id(dst_col_idx)].get();
     auto* virtual_column_iter = dynamic_cast<VirtualColumnIterator*>(column_iter);
     virtual_column_iter->prepare_materialization(
             std::move(result_column),

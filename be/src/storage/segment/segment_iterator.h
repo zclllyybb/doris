@@ -274,11 +274,6 @@ private:
     bool _can_evaluated_by_vectorized(std::shared_ptr<ColumnPredicate> predicate);
 
     void _init_schema_block_id_map();
-    void _init_column_id_mappings();
-    const std::vector<ColumnId>& _expr_column_ids_ref() const;
-    ColumnId _expr_column_id(size_t ordinal) const;
-    bool _expr_column_ids_match_schema() const;
-    void _build_expr_block(Block* block, Block* expr_block);
     [[nodiscard]] Status _extract_common_expr_columns(const VExprSPtr& expr);
     [[nodiscard]] Status _execute_common_expr(uint16_t* sel_rowid_idx, uint16_t& selected_size,
                                               Block* block);
@@ -356,8 +351,6 @@ private:
     std::shared_ptr<Segment> _segment;
     // read schema from scanner
     SchemaSPtr _schema;
-    // expr slot ordinal -> storage column id before storage-side read schema expansion
-    const std::vector<ColumnId>* _expr_column_ids = nullptr;
     // storage type schema related to _schema, since column in segment may be different with type in _schema
     std::vector<IndexFieldNameAndTypePair> _storage_name_and_type;
     // vector idx -> column iterarator
