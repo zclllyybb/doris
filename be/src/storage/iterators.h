@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <set>
 
 #include "common/status.h"
 #include "core/block/block.h"
@@ -132,6 +133,7 @@ public:
     // Final scan project columns before storage-side read schema expansion.
     const std::vector<ColumnId>* project_columns = nullptr;
     const std::set<int32_t>* output_columns = nullptr;
+    std::set<ColumnId> filled_columns;
     // runtime state
     RuntimeState* runtime_state = nullptr;
     RowsetId rowset_id;

@@ -594,6 +594,11 @@ Status OlapScanLocalState::_init_scanners(std::list<ScannerSPtr>* scanners) {
     for (auto uid : p._olap_scan_node.output_column_unique_ids) {
         _output_column_ids.emplace(uid);
     }
+    if (p._olap_scan_node.__isset.filled_key_column_slot_ids) {
+        for (auto slot_id : p._olap_scan_node.filled_key_column_slot_ids) {
+            _filled_key_column_slot_ids.emplace(slot_id);
+        }
+    }
 
     // Step 3: convert accumulated scan key pairs into OlapScanRange objects.
     // Each OlapScanRange carries real begin/end OlapTuples with has_lower_bound = true.

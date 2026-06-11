@@ -2118,21 +2118,44 @@ bool SegmentIterator::_can_evaluated_by_vectorized(std::shared_ptr<ColumnPredica
     }
 }
 
-bool SegmentIterator::_prune_column(ColumnId cid, MutableColumnPtr& column, bool fill_defaults,
-                                    size_t num_of_defaults) {
-    if (_need_read_data(cid)) {
-        return false;
-    }
-    if (!fill_defaults) {
-        return true;
-    }
-    if (is_column_nullable(*column)) {
+void SegmentIterator::_fill_default_column(MutableColumnPtr& column, size_t num_of_defaults) {
+    if (column->is_nullable()) {
         auto nullable_col_ptr = reinterpret_cast<ColumnNullable*>(column.get());
         nullable_col_ptr->get_null_map_column().insert_many_defaults(num_of_defaults);
         nullable_col_ptr->get_nested_column_ptr()->insert_many_defaults(num_of_defaults);
     } else {
         // assert(column->is_const());
         column->insert_many_defaults(num_of_defaults);
+    }
+}
+
+bool SegmentIterator::_fill_filled_column(ColumnId cid, MutableColumnPtr& column,
+                                          bool fill_defaults, size_t num_of_defaults) {
+    if (!_opts.filled_columns.contains(cid)) {
+        return false;
+    }
+    DORIS_CHECK(!_vir_cid_to_idx_in_block.contains(cid));
+    DORIS_CHECK(!_has_delete_predicate(cid));
+    DORIS_CHECK(cid < _is_pred_column.size());
+    DORIS_CHECK(!_is_pred_column[cid]);
+    DORIS_CHECK(cid < _is_common_expr_column.size());
+    DORIS_CHECK(!_is_common_expr_column[cid]);
+    if (fill_defaults) {
+        _fill_default_column(column, num_of_defaults);
+    }
+    return true;
+}
+
+bool SegmentIterator::_prune_column(ColumnId cid, MutableColumnPtr& column, bool fill_defaults,
+                                    size_t num_of_defaults) {
+    if (_fill_filled_column(cid, column, fill_defaults, num_of_defaults)) {
+        return true;
+    }
+    if (_need_read_data(cid)) {
+        return false;
+    }
+    if (fill_defaults) {
+        _fill_default_column(column, num_of_defaults);
     }
     return true;
 }

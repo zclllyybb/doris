@@ -58,6 +58,7 @@ public class LogicalOlapScanToPhysicalOlapScan extends OneImplementationRuleFact
                         convertDistribution(olapScan),
                         olapScan.getPreAggStatus(),
                         olapScan.getOutputByIndex(olapScan.getTable().getBaseIndexId()),
+                        olapScan.getOutputByIndex(olapScan.getSelectedIndexId()),
                         Optional.empty(),
                         olapScan.getLogicalProperties(),
                         null,

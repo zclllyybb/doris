@@ -1007,6 +1007,8 @@ struct TOlapScanNode {
   // Only partitions that are candidates for pruning are included; partitions FE
   // does not want pruned (e.g. default catch-all) are omitted from this list.
   27: optional list<TPartitionBoundary> partition_boundaries
+  // Slot ids of storage key columns filled by FE only to align the scan tuple with storage schema.
+  28: optional set<i32> filled_key_column_slot_ids
 }
 
 struct TEqJoinCondition {

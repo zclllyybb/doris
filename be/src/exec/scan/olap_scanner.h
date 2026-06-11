@@ -24,6 +24,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -118,6 +119,7 @@ private:
 
 public:
     std::vector<ColumnId> _return_columns;
+    std::set<ColumnId> _filled_columns;
 
     std::unordered_set<uint32_t> _tablet_columns_convert_to_null_set;
 

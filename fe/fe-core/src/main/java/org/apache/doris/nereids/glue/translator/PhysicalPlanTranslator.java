@@ -36,6 +36,7 @@ import org.apache.doris.analysis.TupleId;
 import org.apache.doris.catalog.AliasFunction;
 import org.apache.doris.catalog.Column;
 import org.apache.doris.catalog.Env;
+import org.apache.doris.catalog.KeysType;
 import org.apache.doris.catalog.OlapTable;
 import org.apache.doris.catalog.RowBinlogTableWrapper;
 import org.apache.doris.catalog.TableIf;
@@ -870,7 +871,9 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
     }
 
     private PlanFragment computePhysicalOlapScan(PhysicalOlapScan olapScan, PlanTranslatorContext context) {
-        List<Slot> slots = olapScan.getOutput();
+        List<Slot> outputSlots = olapScan.getOutput();
+        StorageAlignedScanSlots storageAlignedScanSlots = computeStorageAlignedScanSlots(olapScan);
+        List<Slot> slots = storageAlignedScanSlots.scanSlots;
         OlapTable olapTable = olapScan.getTable();
         if (olapScan.isIncrementalScan()) {
             olapTable = new RowBinlogTableWrapper(((OlapTableStreamWrapper) olapTable).getBaseTable(),
@@ -879,6 +882,8 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
         // generate real output tuple
         TupleDescriptor tupleDescriptor = generateTupleDesc(slots, olapTable, context);
         List<SlotDescriptor> slotDescriptors = tupleDescriptor.getSlots();
+        Map<ExprId, SlotDescriptor> exprIdToSlotDescriptor = slotDescriptors.stream()
+                .collect(Collectors.toMap(s -> context.findExprId(s.getId()), s -> s));
 
         // put virtual column expr into slot desc
         Map<ExprId, Expression> slotToVirtualColumnMap = olapScan.getSlotToVirtualColumnMap();
@@ -898,6 +903,12 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
 
         OlapScanNode olapScanNode = new OlapScanNode(context.nextPlanNodeId(), tupleDescriptor, "OlapScanNode",
                 context.getScanContext());
+        Set<Integer> filledKeyColumnSlotIds = storageAlignedScanSlots.filledKeyExprIds.stream()
+                .map(exprId -> Objects.requireNonNull(exprIdToSlotDescriptor.get(exprId),
+                        "missing filled key slot descriptor for " + exprId))
+                .map(slotDescriptor -> slotDescriptor.getId().asInt())
+                .collect(Collectors.toSet());
+        olapScanNode.setFilledKeyColumnSlotIds(filledKeyColumnSlotIds);
         olapScanNode.setNereidsId(olapScan.getId());
         context.getNereidsIdToPlanNodeIdMap().put(olapScan.getId(), olapScanNode.getId());
 
@@ -931,15 +942,18 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
             //   because it is whole table cardinality and will break block rules.
             // olapScanNode.setCardinality((long) olapScan.getStats().getRowCount());
             if (context.getSessionVariable() != null && context.getSessionVariable().forbidUnknownColStats) {
-                for (int i = 0; i < slots.size(); i++) {
-                    SlotReference slot = (SlotReference) slots.get(i);
+                for (Slot outputSlot : outputSlots) {
+                    SlotReference slot = (SlotReference) outputSlot;
                     boolean inVisibleCol = slot.getOriginalColumn().isPresent()
                             && StatisticConstants.shouldIgnoreCol(olapTable, slot.getOriginalColumn().get());
                     if (olapScan.getStats().findColumnStatistics(slot).isUnKnown()
                             && !isComplexDataType(slot.getDataType())
                             && !StatisticConstants.isSystemTable(olapTable)
                             && !inVisibleCol) {
-                        context.addUnknownStatsColumn(olapScanNode, slotDescriptors.get(i).getId());
+                        SlotDescriptor slotDescriptor = Objects.requireNonNull(
+                                exprIdToSlotDescriptor.get(slot.getExprId()),
+                                "missing output slot descriptor for " + slot.getExprId());
+                        context.addUnknownStatsColumn(olapScanNode, slotDescriptor.getId());
                     }
                 }
             }
@@ -980,6 +994,14 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
         context.addScanNode(olapScanNode, olapScan);
 
         translateRuntimeFilter(olapScan, olapScanNode, context);
+        if (!storageAlignedScanSlots.filledKeyExprIds.isEmpty()) {
+            List<Expr> projectionExprs = outputSlots.stream()
+                    .map(slot -> context.findSlotRef(slot.getExprId()))
+                    .collect(Collectors.toList());
+            TupleDescriptor projectionTuple = generateTupleDesc(outputSlots, olapTable, context);
+            olapScanNode.setProjectList(projectionExprs);
+            olapScanNode.setOutputTupleDesc(projectionTuple);
+        }
 
         olapScanNode.setPushDownAggNoGrouping(context.getRelationPushAggOp(olapScan.getRelationId()));
         // Create PlanFragment
@@ -999,6 +1021,70 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
         context.addPlanFragment(planFragment);
         updateLegacyPlanIdToPhysicalPlan(planFragment.getPlanRoot(), olapScan);
         return planFragment;
+    }
+
+    private StorageAlignedScanSlots computeStorageAlignedScanSlots(PhysicalOlapScan olapScan) {
+        if (!shouldAlignScanSlotsToStorageSchema(olapScan)) {
+            return new StorageAlignedScanSlots(olapScan.getOutput(), Collections.emptySet());
+        }
+
+        Set<ExprId> outputExprIds = olapScan.getOutput().stream()
+                .map(Slot::getExprId)
+                .collect(Collectors.toSet());
+        Map<Integer, Slot> slotByColumnUniqueId = Stream.concat(
+                        olapScan.getSelectedIndexOutputs().stream(), olapScan.getOutput().stream())
+                .filter(slot -> ((SlotReference) slot).getOriginalColumn().isPresent())
+                .collect(Collectors.toMap(
+                        slot -> ((SlotReference) slot).getOriginalColumn().get().getUniqueId(),
+                        slot -> slot,
+                        (left, right) -> right));
+
+        List<Slot> storageSlots = new ArrayList<>();
+        Set<ExprId> storageExprIds = new HashSet<>();
+        Set<ExprId> filledKeyExprIds = new HashSet<>();
+        long selectedIndexId = olapScan.getSelectedIndexId() == -1
+                ? olapScan.getTable().getBaseIndexId()
+                : olapScan.getSelectedIndexId();
+        for (Column column : olapScan.getTable().getSchemaByIndexId(selectedIndexId, true)) {
+            if (!column.isKey()) {
+                break;
+            }
+            Slot slot = Objects.requireNonNull(slotByColumnUniqueId.get(column.getUniqueId()),
+                    "missing scan slot for storage key column " + column.getName());
+            if (storageExprIds.add(slot.getExprId())) {
+                storageSlots.add(slot);
+            }
+            if (!outputExprIds.contains(slot.getExprId())) {
+                filledKeyExprIds.add(slot.getExprId());
+            }
+        }
+        for (Slot slot : olapScan.getOutput()) {
+            if (storageExprIds.add(slot.getExprId())) {
+                storageSlots.add(slot);
+            }
+        }
+        if (filledKeyExprIds.isEmpty()) {
+            return new StorageAlignedScanSlots(olapScan.getOutput(), Collections.emptySet());
+        }
+        return new StorageAlignedScanSlots(storageSlots, filledKeyExprIds);
+    }
+
+    private boolean shouldAlignScanSlotsToStorageSchema(PhysicalOlapScan olapScan) {
+        KeysType keysType = olapScan.getSelectedIndexId() == -1
+                ? olapScan.getTable().getKeysType()
+                : olapScan.getTable().getIndexMetaByIndexId(olapScan.getSelectedIndexId()).getKeysType();
+        return keysType == KeysType.AGG_KEYS
+                || (keysType == KeysType.UNIQUE_KEYS && !olapScan.getTable().getEnableUniqueKeyMergeOnWrite());
+    }
+
+    private static class StorageAlignedScanSlots {
+        private final List<Slot> scanSlots;
+        private final Set<ExprId> filledKeyExprIds;
+
+        StorageAlignedScanSlots(List<Slot> scanSlots, Set<ExprId> filledKeyExprIds) {
+            this.scanSlots = scanSlots;
+            this.filledKeyExprIds = filledKeyExprIds;
+        }
     }
 
     private void translateRuntimeFilter(PhysicalRelation physicalRelation, ScanNode scanNode,
@@ -2928,6 +3014,11 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
             Set<SlotId> requiredSlotIdSet, Set<SlotId> requiredByProjectSlotIdSet,
             PlanTranslatorContext context) {
         Set<SlotId> requiredWithVirtualColumns = Sets.newHashSet(requiredSlotIdSet);
+        if (scanNode instanceof OlapScanNode) {
+            ((OlapScanNode) scanNode).getFilledKeyColumnSlotIds().stream()
+                    .map(SlotId::new)
+                    .forEach(requiredWithVirtualColumns::add);
+        }
         for (SlotDescriptor virtualSlot : scanNode.getTupleDesc().getSlots()) {
             Expr virtualColumn = virtualSlot.getVirtualColumn();
             if (virtualColumn == null) {

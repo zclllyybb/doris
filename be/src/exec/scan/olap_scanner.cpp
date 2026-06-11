@@ -92,6 +92,7 @@ OlapScanner::OlapScanner(ScanLocalStateBase* parent, OlapScanner::Params&& param
                                  .rs_splits {},
                                  .return_columns {},
                                  .output_columns {},
+                                 .filled_columns {},
                                  .common_expr_ctxs_push_down {},
                                  .topn_filter_source_node_ids {},
                                  .key_group_cluster_key_idxes {},
@@ -496,6 +497,7 @@ Status OlapScanner::_init_tablet_reader_params(
         }
     } else if (_tablet_reader_params.direct_mode) {
         _tablet_reader_params.return_columns = _return_columns;
+        _tablet_reader_params.filled_columns = _filled_columns;
     } else {
         // we need to fetch all key columns to do the right aggregation on storage engine side.
         for (size_t i = 0; i < tablet_schema->num_key_columns(); ++i) {
@@ -727,6 +729,11 @@ Status OlapScanner::_init_return_columns() {
         }
 
         const auto& column = tablet_schema->column(index);
+        auto* olap_local_state = static_cast<OlapScanLocalState*>(_local_state);
+        if (olap_local_state->_filled_key_column_slot_ids.contains(slot->id())) {
+            DORIS_CHECK(column.is_key());
+            _filled_columns.insert(index);
+        }
         int32_t unique_id =
                 column.unique_id() >= 0 ? column.unique_id() : column.parent_unique_id();
         if (!slot->all_access_paths().empty()) {

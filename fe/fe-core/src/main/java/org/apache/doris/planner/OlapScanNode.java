@@ -187,6 +187,7 @@ public class OlapScanNode extends ScanNode {
 
     private SortInfo sortInfo = null;
     private Set<Integer> outputColumnUniqueIds = new HashSet<>();
+    private Set<Integer> filledKeyColumnSlotIds = new HashSet<>();
 
     // When scan match sort_info, we can push limit into OlapScanNode.
     // It's limit for scanner instead of scanNode so we add a new limit.
@@ -265,6 +266,14 @@ public class OlapScanNode extends ScanNode {
 
     public void setTableSample(TableSample tSample) {
         this.tableSample = tSample;
+    }
+
+    public void setFilledKeyColumnSlotIds(Set<Integer> filledKeyColumnSlotIds) {
+        this.filledKeyColumnSlotIds = filledKeyColumnSlotIds;
+    }
+
+    public Set<Integer> getFilledKeyColumnSlotIds() {
+        return filledKeyColumnSlotIds;
     }
 
     public void setNereidsPrunedTabletIds(Set<Long> nereidsPrunedTabletIds) {
@@ -1312,6 +1321,9 @@ public class OlapScanNode extends ScanNode {
 
         if (outputColumnUniqueIds != null) {
             msg.olap_scan_node.setOutputColumnUniqueIds(outputColumnUniqueIds);
+        }
+        if (filledKeyColumnSlotIds != null) {
+            msg.olap_scan_node.setFilledKeyColumnSlotIds(filledKeyColumnSlotIds);
         }
 
         msg.olap_scan_node.setDistributeColumnIds(new ArrayList<>(distributionColumnIds));

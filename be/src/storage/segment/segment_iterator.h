@@ -296,6 +296,9 @@ private:
                                      uint16_t* sel_rowid_idx, uint16_t select_size);
 
     bool _need_read_data(ColumnId cid);
+    void _fill_default_column(MutableColumnPtr& column, size_t num_of_defaults);
+    bool _fill_filled_column(ColumnId cid, MutableColumnPtr& column, bool fill_defaults,
+                             size_t num_of_defaults);
     bool _prune_column(ColumnId cid, MutableColumnPtr& column, bool fill_defaults,
                        size_t num_of_defaults);
 

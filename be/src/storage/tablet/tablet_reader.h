@@ -158,6 +158,7 @@ public:
         std::vector<ColumnId> return_columns;
         // output_columns only contain columns in OrderByExprs and outputExprs
         std::set<int32_t> output_columns;
+        std::set<ColumnId> filled_columns;
         RuntimeProfile* profile = nullptr;
         RuntimeState* runtime_state = nullptr;
 
