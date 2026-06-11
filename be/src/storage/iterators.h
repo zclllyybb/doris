@@ -130,8 +130,8 @@ public:
     std::vector<uint32_t>* read_orderby_key_columns = nullptr;
     io::IOContext io_ctx;
     VExprContextSPtrs common_expr_ctxs_push_down;
-    // Final scan project columns before storage-side read schema expansion.
-    const std::vector<ColumnId>* project_columns = nullptr;
+    // Column ids in the slot ordinal layout used by storage-side expressions.
+    const std::vector<ColumnId>* expr_column_ids = nullptr;
     const std::set<int32_t>* output_columns = nullptr;
     std::set<ColumnId> filled_columns;
     // runtime state
