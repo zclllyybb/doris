@@ -1322,7 +1322,7 @@ public class OlapScanNode extends ScanNode {
         if (outputColumnUniqueIds != null) {
             msg.olap_scan_node.setOutputColumnUniqueIds(outputColumnUniqueIds);
         }
-        if (filledKeyColumnSlotIds != null) {
+        if (!filledKeyColumnSlotIds.isEmpty()) {
             msg.olap_scan_node.setFilledKeyColumnSlotIds(filledKeyColumnSlotIds);
         }
 

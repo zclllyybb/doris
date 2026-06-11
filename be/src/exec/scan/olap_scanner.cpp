@@ -719,7 +719,9 @@ Status OlapScanner::_init_return_columns() {
 
         const auto& column = tablet_schema->column(index);
         auto* olap_local_state = static_cast<OlapScanLocalState*>(_local_state);
-        if (olap_local_state->_filled_key_column_slot_ids.contains(slot->id())) {
+        const auto& olap_scan_node = olap_local_state->olap_scan_node();
+        if (olap_scan_node.__isset.filled_key_column_slot_ids &&
+            olap_scan_node.filled_key_column_slot_ids.contains(slot->id())) {
             DORIS_CHECK(column.is_key());
             _filled_columns.insert(index);
         }
