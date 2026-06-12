@@ -867,10 +867,11 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
 
     @Override
     public PlanFragment visitPhysicalOlapScan(PhysicalOlapScan olapScan, PlanTranslatorContext context) {
-        return computePhysicalOlapScan(olapScan, context);
+        return computePhysicalOlapScan(olapScan, context, true);
     }
 
-    private PlanFragment computePhysicalOlapScan(PhysicalOlapScan olapScan, PlanTranslatorContext context) {
+    private PlanFragment computePhysicalOlapScan(PhysicalOlapScan olapScan, PlanTranslatorContext context,
+            boolean projectStorageAlignedScanOutput) {
         List<Slot> outputSlots = olapScan.getOutput();
         StorageAlignedScanSlots storageAlignedScanSlots = computeStorageAlignedScanSlots(olapScan);
         List<Slot> slots = storageAlignedScanSlots.scanSlots;
@@ -994,7 +995,7 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
         context.addScanNode(olapScanNode, olapScan);
 
         translateRuntimeFilter(olapScan, olapScanNode, context);
-        if (!storageAlignedScanSlots.filledKeyExprIds.isEmpty()) {
+        if (projectStorageAlignedScanOutput && !storageAlignedScanSlots.filledKeyExprIds.isEmpty()) {
             List<Expr> projectionExprs = outputSlots.stream()
                     .map(slot -> context.findSlotRef(slot.getExprId()))
                     .collect(Collectors.toList());
@@ -2937,7 +2938,7 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
     @Override
     public PlanFragment visitPhysicalLazyMaterializeOlapScan(PhysicalLazyMaterializeOlapScan lazyScan,
             PlanTranslatorContext context) {
-        PlanFragment planFragment = computePhysicalOlapScan(lazyScan.getScan(), context);
+        PlanFragment planFragment = computePhysicalOlapScan(lazyScan.getScan(), context, false);
         OlapScanNode olapScanNode = (OlapScanNode) planFragment.getPlanRoot();
         // set lazy materialized context
         olapScanNode.setIsTopnLazyMaterialize(true);
@@ -2945,9 +2946,18 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
         Set<SlotId> scanIds = lazyScan.getOutput().stream().map(NamedExpression::getExprId)
                 .map(context::findSlotRef).filter(Objects::nonNull).map(SlotRef::getSlotId)
                 .collect(Collectors.toSet());
+        olapScanNode.getFilledKeyColumnSlotIds().stream().map(SlotId::new).forEach(scanIds::add);
 
         olapScanNode.getTupleDesc().getSlots().removeIf(slot -> !scanIds.contains(slot.getId()));
         context.createSlotDesc(olapScanNode.getTupleDesc(), lazyScan.getRowId());
+        if (!olapScanNode.getFilledKeyColumnSlotIds().isEmpty()) {
+            List<Expr> projectionExprs = lazyScan.getOutput().stream()
+                    .map(slot -> context.findSlotRef(slot.getExprId()))
+                    .collect(Collectors.toList());
+            TupleDescriptor projectionTuple = generateTupleDesc(lazyScan.getOutput(), lazyScan.getTable(), context);
+            olapScanNode.setProjectList(projectionExprs);
+            olapScanNode.setOutputTupleDesc(projectionTuple);
+        }
         for (Slot slot : lazyScan.getOutput()) {
             if (((SlotReference) slot).getOriginalColumn().isPresent()) {
                 olapScanNode.addTopnLazyMaterializeOutputColumns(((SlotReference) slot).getOriginalColumn().get());
