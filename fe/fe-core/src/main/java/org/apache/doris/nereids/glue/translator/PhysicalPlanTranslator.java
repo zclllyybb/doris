@@ -1032,13 +1032,20 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
         Set<ExprId> outputExprIds = olapScan.getOutput().stream()
                 .map(Slot::getExprId)
                 .collect(Collectors.toSet());
-        Map<Integer, Slot> slotByColumnUniqueId = Stream.concat(
-                        olapScan.getSelectedIndexOutputs().stream(), olapScan.getOutput().stream())
-                .filter(slot -> ((SlotReference) slot).getOriginalColumn().isPresent())
-                .collect(Collectors.toMap(
-                        slot -> ((SlotReference) slot).getOriginalColumn().get().getUniqueId(),
-                        slot -> slot,
-                        (left, right) -> right));
+        Map<Integer, Slot> slotByColumnUniqueId = new HashMap<>();
+        Map<String, Slot> slotByColumnName = new HashMap<>();
+        Stream.concat(olapScan.getSelectedIndexOutputs().stream(), olapScan.getOutput().stream())
+                .forEach(slot -> {
+                    Optional<Column> originalColumn = ((SlotReference) slot).getOriginalColumn();
+                    if (originalColumn.isPresent()) {
+                        Column column = originalColumn.get();
+                        if (column.getUniqueId() == Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                            slotByColumnName.put(column.getName(), slot);
+                        } else {
+                            slotByColumnUniqueId.put(column.getUniqueId(), slot);
+                        }
+                    }
+                });
 
         List<Slot> storageSlots = new ArrayList<>();
         Set<ExprId> storageExprIds = new HashSet<>();
@@ -1050,8 +1057,10 @@ public class PhysicalPlanTranslator extends DefaultPlanVisitor<PlanFragment, Pla
             if (!column.isKey()) {
                 break;
             }
-            Slot slot = Objects.requireNonNull(slotByColumnUniqueId.get(column.getUniqueId()),
-                    "missing scan slot for storage key column " + column.getName());
+            Slot slot = column.getUniqueId() == Column.COLUMN_UNIQUE_ID_INIT_VALUE
+                    ? slotByColumnName.get(column.getName())
+                    : slotByColumnUniqueId.get(column.getUniqueId());
+            slot = Objects.requireNonNull(slot, "missing scan slot for storage key column " + column.getName());
             if (storageExprIds.add(slot.getExprId())) {
                 storageSlots.add(slot);
             }
