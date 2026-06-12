@@ -2094,12 +2094,14 @@ void SegmentIterator::_fill_default_column(MutableColumnPtr& column, size_t num_
 
 bool SegmentIterator::_prune_column(ColumnId cid, MutableColumnPtr& column,
                                     size_t num_of_defaults) {
-    DCHECK_LT(cid, _is_pred_column.size());
-    DCHECK_LT(cid, _is_common_expr_column.size());
-    if (_opts.filled_columns.contains(cid) && !_virtual_column_exprs.contains(cid) &&
-        !_has_delete_predicate(cid) && !_is_pred_column[cid] && !_is_common_expr_column[cid]) {
-        _fill_default_column(column, num_of_defaults);
-        return true;
+    if (_opts.filled_columns.contains(cid) && !_is_pred_column.empty()) {
+        DCHECK_EQ(_is_pred_column.size(), _is_common_expr_column.size());
+        DCHECK_LT(cid, _is_pred_column.size());
+        if (!_virtual_column_exprs.contains(cid) && !_has_delete_predicate(cid) &&
+            !_is_pred_column[cid] && !_is_common_expr_column[cid]) {
+            _fill_default_column(column, num_of_defaults);
+            return true;
+        }
     }
     if (_need_read_data(cid)) {
         return false;
