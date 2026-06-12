@@ -2094,7 +2094,10 @@ void SegmentIterator::_fill_default_column(MutableColumnPtr& column, size_t num_
 
 bool SegmentIterator::_prune_column(ColumnId cid, MutableColumnPtr& column,
                                     size_t num_of_defaults) {
-    if (_opts.filled_columns.contains(cid)) {
+    DCHECK_LT(cid, _is_pred_column.size());
+    DCHECK_LT(cid, _is_common_expr_column.size());
+    if (_opts.filled_columns.contains(cid) && !_virtual_column_exprs.contains(cid) &&
+        !_has_delete_predicate(cid) && !_is_pred_column[cid] && !_is_common_expr_column[cid]) {
         _fill_default_column(column, num_of_defaults);
         return true;
     }
@@ -3062,11 +3065,18 @@ Status SegmentIterator::_execute_common_expr(uint16_t* sel_rowid_idx, uint16_t& 
     uint16_t original_size = selected_size;
     _opts.stats->expr_cond_input_rows += original_size;
 
-    DCHECK_EQ(block->rows(), selected_size);
-    IColumn::Filter filter(block->rows(), 1);
+    // Some output columns may stay empty until after common expr filtering. Use the
+    // selected row count instead of Block::rows(), which is derived from the first column.
+    IColumn::Filter filter(selected_size, 1);
     bool can_filter_all = false;
-    RETURN_IF_ERROR(VExprContext::execute_conjuncts(_common_expr_ctxs_push_down, nullptr, block,
-                                                    &filter, &can_filter_all));
+    auto* __restrict filter_data = filter.data();
+    for (const auto& expr_ctx : _common_expr_ctxs_push_down) {
+        RETURN_IF_ERROR(expr_ctx->execute_filter(block, filter_data, selected_size, false,
+                                                 &can_filter_all));
+        if (can_filter_all) {
+            break;
+        }
+    }
     RETURN_IF_CATCH_EXCEPTION(Block::filter_block_internal(block, _columns_to_filter, filter));
 
     selected_size = _evaluate_common_expr_filter(sel_rowid_idx, selected_size, filter);
