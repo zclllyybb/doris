@@ -102,9 +102,12 @@ public class PhysicalPlanTranslatorTest extends TestWithFeService {
         List<String> qualifier = new ArrayList<>();
         qualifier.add("test");
         List<Slot> t1Output = new ArrayList<>();
-        SlotReference col1 = new SlotReference("col1", IntegerType.INSTANCE);
-        SlotReference col2 = new SlotReference("col2", IntegerType.INSTANCE);
-        SlotReference col3 = new SlotReference("col2", IntegerType.INSTANCE);
+        SlotReference col1 = SlotReference.fromColumn(StatementScopeIdGenerator.newExprId(),
+                t1, t1.getBaseSchema().get(0), qualifier);
+        SlotReference col2 = SlotReference.fromColumn(StatementScopeIdGenerator.newExprId(),
+                t1, t1.getBaseSchema().get(1), qualifier);
+        SlotReference col3 = SlotReference.fromColumn(StatementScopeIdGenerator.newExprId(),
+                t1, t1.getBaseSchema().get(1), qualifier);
         t1Output.add(col1);
         t1Output.add(col2);
         t1Output.add(col3);
