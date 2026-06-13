@@ -517,6 +517,7 @@ void TabletMeta::init_schema_from_thrift(const TTabletSchema& tablet_schema,
     bool has_bf_columns = false;
     for (TColumn tcolumn : tablet_schema.columns) {
         ColumnPB* column = tablet_schema_pb->add_column();
+        uint32_t column_idx = col_ordinal;
         uint32_t unique_id = -1;
         if (tcolumn.col_unique_id >= 0) {
             unique_id = tcolumn.col_unique_id;
@@ -528,6 +529,11 @@ void TabletMeta::init_schema_from_thrift(const TTabletSchema& tablet_schema,
 
         if (column->is_bf_column()) {
             has_bf_columns = true;
+        }
+        if (tcolumn.column_name == BINLOG_LSN_COL) {
+            tablet_schema_pb->set_binlog_lsn_col_idx(column_idx);
+        } else if (tcolumn.column_name == BINLOG_TIMESTAMP_COL) {
+            tablet_schema_pb->set_binlog_timestamp_col_idx(column_idx);
         }
 
         if (tablet_schema.__isset.indexes) {
