@@ -374,6 +374,9 @@ Status OlapScanner::_init_tablet_reader_params(
                                              push_down_agg_type != TPushAggOp::COUNT_ON_INDEX);
     }
 
+    // Reset filled-column hints for this tablet. A scan tuple can include extra
+    // storage key slots to keep the tuple aligned with the storage key prefix;
+    // the final projection output tuple may omit those slots.
     _tablet_reader_params.filled_columns.clear();
     RETURN_IF_ERROR(_init_variant_columns());
     RETURN_IF_ERROR(_init_return_columns());
@@ -690,6 +693,11 @@ Status OlapScanner::_init_variant_columns() {
 }
 
 Status OlapScanner::_init_return_columns() {
+    // For OLAP scan, _output_tuple_desc is the storage-aligned scan tuple
+    // descriptor. filled_key_column_slot_ids marks key slots that are present
+    // only for scan-schema alignment. For example, on an AGG table with keys
+    // (k1, k2), a query returning only k2 may still scan (k1, k2); k1 is a
+    // filled column and can be removed by the projection output tuple.
     for (auto* slot : _output_tuple_desc->slots()) {
         // variant column using path to index a column
         int32_t index = 0;
@@ -710,11 +718,10 @@ Status OlapScanner::_init_return_columns() {
         }
 
         if (slot->get_virtual_column_expr()) {
-            ColumnId virtual_column_cid = index;
-            _virtual_column_exprs[virtual_column_cid] = _slot_id_to_virtual_column_expr[slot->id()];
+            _virtual_column_exprs[index] = _slot_id_to_virtual_column_expr[slot->id()];
 
             VLOG_DEBUG << fmt::format("Virtual column, slot id: {}, cid {}, type: {}", slot->id(),
-                                      virtual_column_cid, slot->get_data_type_ptr()->get_name());
+                                      index, slot->get_data_type_ptr()->get_name());
         }
 
         const auto& column = tablet_schema->column(index);

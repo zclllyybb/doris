@@ -158,6 +158,11 @@ public:
         std::vector<ColumnId> return_columns;
         // output_columns only contain columns in OrderByExprs and outputExprs
         std::set<int32_t> output_columns;
+        // Storage key columns that are present only for scan-schema alignment.
+        // Example: for AGG keys (k1, k2), a query that returns k2 can scan
+        // (k1, k2) and project away k1. Direct readers may avoid reading such
+        // columns only if the lower iterator proves their real values are not
+        // required by predicates, delete conditions, or expressions.
         std::set<ColumnId> filled_columns;
         RuntimeProfile* profile = nullptr;
         RuntimeState* runtime_state = nullptr;

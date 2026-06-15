@@ -239,7 +239,7 @@ private:
                                                    uint16_t* sel_rowid_idx, uint16_t select_size) {
         SCOPED_RAW_TIMER(&_opts.stats->output_col_ns);
         for (auto cid : column_ids) {
-            int block_cid = _schema_block_id_map[cid];
+            int block_cid = _schema->column_index(cid);
             // Only the additional deleted filter condition need to materialize column be at the end of the block
             // We should not to materialize the column of query engine do not need. So here just return OK.
             // Eg:
@@ -273,7 +273,6 @@ private:
 
     bool _can_evaluated_by_vectorized(std::shared_ptr<ColumnPredicate> predicate);
 
-    void _init_schema_block_id_map();
     [[nodiscard]] Status _extract_common_expr_columns(const VExprSPtr& expr);
     [[nodiscard]] Status _execute_common_expr(uint16_t* sel_rowid_idx, uint16_t& selected_size,
                                               Block* block);
@@ -315,6 +314,7 @@ private:
     bool _no_need_read_key_data(ColumnId cid, MutableColumnPtr& column, size_t nrows_read);
 
     bool _has_delete_predicate(ColumnId cid);
+    bool _can_fill_column_with_default(ColumnId cid);
 
     bool _can_opt_limit_reads();
 
@@ -392,11 +392,11 @@ private:
     // so we need a field to stand for columns first time to read
     std::vector<ColumnId> _predicate_column_ids;
     std::vector<ColumnId> _common_expr_column_ids;
-    // TODO: Should use std::vector<size_t>
+    // Block slot indexes to filter after common expr evaluation. This is not
+    // tablet column ids because Block::filter_block_internal filters by block
+    // position.
     std::vector<ColumnId> _columns_to_filter;
     std::vector<bool> _converted_column_ids;
-    // TODO: Should use std::vector<size_t>
-    std::vector<int> _schema_block_id_map; // map from schema column id to column idx in Block
 
     // the actual init process is delayed to the first call to next_batch()
     bool _lazy_inited;

@@ -131,6 +131,10 @@ public:
     io::IOContext io_ctx;
     VExprContextSPtrs common_expr_ctxs_push_down;
     const std::set<int32_t>* output_columns = nullptr;
+    // Storage key columns that are included only to keep the scan schema aligned
+    // with the storage key prefix. SegmentIterator can fill them with defaults
+    // only after proving predicates, delete conditions, and expressions do not
+    // need their real values.
     std::set<ColumnId> filled_columns;
     // runtime state
     RuntimeState* runtime_state = nullptr;
