@@ -185,6 +185,9 @@ public:
         if (_cache_background_ttl_gc_thread.joinable()) {
             _cache_background_ttl_gc_thread.join();
         }
+        if (_cache_background_ttl_repair_checker_thread.joinable()) {
+            _cache_background_ttl_repair_checker_thread.join();
+        }
         if (_cache_background_gc_thread.joinable()) {
             _cache_background_gc_thread.join();
         }
@@ -310,6 +313,7 @@ public:
 
     // for be UTs
     std::map<std::string, double> get_stats_unsafe();
+    size_t repair_duplicate_ttl_dirs_once_for_test() { return repair_duplicate_ttl_dirs_once(); }
     [[nodiscard]] size_t need_update_lru_blocks_size_unsafe() const {
         return _need_update_lru_blocks.size();
     }
@@ -460,6 +464,8 @@ private:
 
     void run_background_monitor();
     void run_background_ttl_gc();
+    void run_background_ttl_repair_checker();
+    size_t repair_duplicate_ttl_dirs_once();
     void run_background_gc();
     void run_background_lru_log_replay();
     void run_background_lru_dump();
@@ -517,6 +523,7 @@ private:
     std::condition_variable _close_cv;
     std::thread _cache_background_monitor_thread;
     std::thread _cache_background_ttl_gc_thread;
+    std::thread _cache_background_ttl_repair_checker_thread;
     std::thread _cache_background_gc_thread;
     std::thread _cache_background_evict_in_advance_thread;
     std::thread _cache_background_lru_dump_thread;
@@ -613,6 +620,10 @@ private:
     std::shared_ptr<bvar::LatencyRecorder> _update_lru_blocks_latency_us;
     std::shared_ptr<bvar::LatencyRecorder> _need_update_lru_blocks_length_recorder;
     std::shared_ptr<bvar::LatencyRecorder> _ttl_gc_latency_us;
+    std::shared_ptr<bvar::LatencyRecorder> _ttl_repair_checker_latency_us;
+    std::shared_ptr<bvar::Adder<size_t>> _ttl_repair_checker_suspect_hashes;
+    std::shared_ptr<bvar::Adder<size_t>> _ttl_repair_checker_repaired_dirs;
+    std::shared_ptr<bvar::Adder<size_t>> _ttl_repair_checker_skipped_hashes;
 
     std::shared_ptr<bvar::LatencyRecorder> _shadow_queue_levenshtein_distance;
     // keep _storage last so it will deconstruct first
