@@ -14,6 +14,7 @@ Use this when you need to review code, whether it is code you just completed or 
 
 ## How to use me
 
+0. **MANDATORY GOAL TOOL REQUIREMENT:** Before inspecting the patch, running review commands, or preparing any GitHub review payload, you MUST call `create_goal` to create a concrete goal for completing this code review. Keep that goal active until every suspicious point has a clear conclusion and every substantiated bug has been submitted as a review comment. Do not claim the review is complete unless the `create_goal` goal was created and satisfied.
 1. **Always read and respond to Part 1** (General Principles) — it applies to all code.
 2. For module-specific review, **read the `AGENTS.md` in the corresponding source directory** listed in Part 2. Those files contain non-obvious conventions and traps specific to each subsystem.
 3. Parts 3–7 cover cross-module concerns, testing, high-risk patterns, functions, and standards — refer as needed.

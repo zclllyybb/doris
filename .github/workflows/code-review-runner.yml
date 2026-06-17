@@ -259,7 +259,7 @@ jobs:
           - Required AGENTS.md files: PLACEHOLDER_CONTEXT_DIR/required_agents.txt
 
           Before reviewing any code, you MUST read and follow the code review skill in this repository. During review, you must strictly follow those instructions.
-          At the start of the review, you MUST call create_goal with a concrete objective to complete an exhaustive review of this PR. If the create_goal tool is not available in this runtime, explicitly record that it is unavailable and continue with the same exhaustive review discipline manually.
+          At the start of the review, you MUST call create_goal with a concrete objective to complete an exhaustive review of this PR. Do not claim the review is complete unless the create_goal goal was created and satisfied.
           You MUST maintain that goal until every suspicious point found during review has a clear conclusion: submitted as an inline issue, dismissed as already covered by existing review context, or dismissed with concrete code evidence explaining why it is not a bug.
           You MUST NOT stop after finding the first blocking issue. Keep reviewing changed files, related control flow, tests, and parallel/special-case paths until all plausible correctness, lifecycle, configuration, compatibility, performance, and coverage bugs have been investigated and every bug you can substantiate has been reported.
           Before submitting the final review, do one explicit final sweep over the changed-file list and your unresolved candidate list. Only finish when there are no unresolved suspicious points and all possible substantiated bugs have been pointed out in the GitHub review.
