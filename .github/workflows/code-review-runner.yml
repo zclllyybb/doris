@@ -241,6 +241,8 @@ jobs:
       - name: Prepare review prompt
         run: |
           cat > "$REVIEW_CONTEXT_DIR/review_prompt.txt" <<'PROMPT'
+          This entire review task MUST be executed by using create_goal: first create a concrete review goal, then keep reviewing until you are confident that every changed file and relevant surrounding code path has been examined, every suspicious point has a clear conclusion, and there is no remaining possibility of producing any new valuable review comment. You MUST NOT finish, submit the final summary, or claim completion until that create_goal goal has been created and satisfied.
+
           You are performing an automated code review inside a GitHub Actions runner. The gh CLI is available and authenticated via GH_TOKEN.
           The current directory is the code repository for the PR to be reviewed.
           You MUST NOT attempt to access any files outside the current directory. and you DO NOT need to. But this does not prevent you from normally using any skill or web fetch tools.
