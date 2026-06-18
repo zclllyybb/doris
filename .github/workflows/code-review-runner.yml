@@ -289,6 +289,11 @@ jobs:
           Before reviewing any code, you MUST read and follow the code review skill in this repository. During review, you must strictly follow those instructions.
           At the start of the review, you MUST call create_goal with a concrete objective to complete an exhaustive review of this PR. Do not claim the review is complete unless the create_goal goal was created and satisfied.
           You MUST maintain that goal until every suspicious point found during review has a clear conclusion: submitted as an inline issue, dismissed as already covered by existing review context, or dismissed with concrete code evidence explaining why it is not a bug.
+          You MUST use the available subagent or multi-agent spawn tool for this review; do not merely simulate subagent output in your own text. If tool discovery is needed, search for the subagent/multi-agent tool first. Spawn at least two subagents before final submission:
+          - one subagent focused on optimizer/rewrite correctness, semantic equivalence, and parallel join/aggregate paths.
+          - one subagent focused on regression tests, expected outputs, session/config propagation, compatibility, and basic CI/style failures.
+          Subagents must only report candidate findings with evidence. The main agent must read their results, independently verify or dismiss every candidate with concrete code evidence, deduplicate against existing review threads, and submit the final GitHub review itself. The final summary must include a short "Subagent conclusions" section describing which subagent candidates became inline comments and which were dismissed.
+          If and only if the runtime exposes no subagent or multi-agent tool after explicit discovery, state that limitation in the final summary and continue the review manually.
           You MUST NOT stop after finding the first blocking issue. Keep reviewing changed files, related control flow, tests, and parallel/special-case paths until all plausible correctness, lifecycle, configuration, compatibility, performance, and coverage bugs have been investigated and every bug you can substantiate has been reported.
           Before submitting the final review, do one explicit final sweep over the changed-file list and your unresolved candidate list. Only finish when there are no unresolved suspicious points and all possible substantiated bugs have been pointed out in the GitHub review.
           Before inspecting the PR diff or related code, you MUST read the contents of every AGENTS.md file listed below. These paths are computed from the PR changed file ancestors in this checkout. Searching for or listing paths is not sufficient; read each listed file directly.
@@ -333,6 +338,7 @@ jobs:
           cat > "$REVIEW_CONTEXT_DIR/codex_goal_prompt.txt" <<EOF
           You are performing an automated code review inside a GitHub Actions runner.
           This invocation is already running in Codex goal mode. Before inspecting the PR diff or related code, read ${REVIEW_CONTEXT_REL}/review_prompt.txt verbatim and follow that file as the complete review instruction set.
+          This review must use the available subagent or multi-agent spawn tool for focused review passes, then the main agent must verify, deduplicate, summarize subagent conclusions, and submit the final GitHub review.
           Keep reviewing until every suspicious point has a clear conclusion, every substantiated issue has been submitted as a GitHub inline review comment, and no new valuable review comment remains possible.
           EOF
         env:
