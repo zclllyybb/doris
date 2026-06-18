@@ -346,13 +346,13 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           HEAD_SHA: ${{ inputs.head_sha }}
         run: |
-          PROMPT=$(cat "$REVIEW_CONTEXT_DIR/review_prompt.txt")
+          GOAL_OBJECTIVE="Complete an exhaustive automated GitHub PR review for PR ${PR_NUMBER}: inspect all changed files and relevant code paths, resolve every suspicious point, submit all substantiated inline comments, and only finish after no valuable comments remain."
           review_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           set +e
           # GitHub-hosted runners are ephemeral. Avoid workspace-write here because
           # Codex uses bubblewrap for that mode and uid maps can be unavailable.
-          codex exec --goal "$PROMPT" \
+          codex exec --goal "$GOAL_OBJECTIVE" \
             --cd "$GITHUB_WORKSPACE" \
             --model "gpt-5.5" \
             --config "model_reasoning_effort=\"${REASONING_EFFORT}\"" \
@@ -360,6 +360,7 @@ jobs:
             --color never \
             --json \
             --output-last-message "$REVIEW_CONTEXT_DIR/codex-final-message.txt" \
+            < "$REVIEW_CONTEXT_DIR/review_prompt.txt" \
             > "$REVIEW_CONTEXT_DIR/codex-events.jsonl" \
             2> >(tee "$REVIEW_CONTEXT_DIR/codex-stderr.log" >&2)
           status=$?
