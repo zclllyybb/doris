@@ -80,7 +80,14 @@ jobs:
           tmp_dir="$(mktemp -d)"
           trap 'rm -rf "$tmp_dir"' EXIT
 
-          ossutil -i "$OSS_AK" -k "$OSS_SK" -e "$OSS_ENDPOINT" cp -f "$OSS_CODEX_GOAL_OBJECT" "$tmp_dir/codex-goal"
+          downloaded=false
+          for object in "$OSS_CODEX_GOAL_OBJECT" "$OSS_CODEX_GOAL_FALLBACK_OBJECT"; do
+            if ossutil -i "$OSS_AK" -k "$OSS_SK" -e "$OSS_ENDPOINT" cp -f "$object" "$tmp_dir/codex-goal"; then
+              downloaded=true
+              break
+            fi
+          done
+          test "$downloaded" = "true"
           test -s "$tmp_dir/codex-goal"
           sudo install -m 0755 "$tmp_dir/codex-goal" "$codex_target"
           "$codex_cmd" exec --help | grep -q -- '--goal'
@@ -89,7 +96,8 @@ jobs:
           OSS_AK: ${{ secrets.OSS_AK }}
           OSS_SK: ${{ secrets.OSS_SK }}
           OSS_ENDPOINT: oss-cn-hongkong.aliyuncs.com
-          OSS_CODEX_GOAL_OBJECT: oss://doris-community-ci/codex/codex-goal
+          OSS_CODEX_GOAL_OBJECT: oss://doris-community-ci/codex-goal
+          OSS_CODEX_GOAL_FALLBACK_OBJECT: oss://doris-community-ci/codex/codex-goal
 
       - name: Configure Codex auth
         run: |
