@@ -15,10 +15,12 @@ Use this when you need to review code, whether it is code you just completed or 
 ## How to use me
 
 0. **MANDATORY GOAL TOOL REQUIREMENT:** Before inspecting the patch, running review commands, or preparing any GitHub review payload, you MUST call `create_goal` to create a concrete goal for completing this code review. Keep that goal active until every suspicious point has a clear conclusion and every substantiated bug has been submitted as a review comment. Do not claim the review is complete unless the `create_goal` goal was created and satisfied.
-1. **MANDATORY SUBAGENT REVIEW REQUIREMENT:** Use the available subagent or multi-agent spawn tool for focused review passes; do not merely simulate subagent output. The main agent must read the subagent results, independently verify or dismiss every candidate with concrete code evidence, deduplicate against existing review threads, submit the final GitHub review itself, and summarize the subagent conclusions.
-2. **Always read and respond to Part 1** (General Principles) — it applies to all code.
-3. For module-specific review, **read the `AGENTS.md` in the corresponding source directory** listed in Part 2. Those files contain non-obvious conventions and traps specific to each subsystem.
-4. Parts 3–7 cover cross-module concerns, testing, high-risk patterns, functions, and standards — refer as needed.
+1. **MANDATORY GOAL TODO REQUIREMENT:** The goal todo list must explicitly track instruction loading, subagent spawning, shared-ledger maintenance, candidate verification/deduplication, final subagent convergence, GitHub review submission, and GitHub API verification. The goal is not complete until every live subagent has said `NO_NEW_VALUABLE_FINDINGS` for the same current ledger/comment set after the last candidate update.
+2. **MANDATORY SUBAGENT REVIEW REQUIREMENT:** Use the available subagent or multi-agent spawn tool for focused review passes; do not merely simulate subagent output. The main agent must read the subagent results, independently verify or dismiss every candidate with concrete code evidence, deduplicate against existing review threads, submit the final GitHub review itself, and summarize the subagent conclusions.
+3. **MANDATORY SHARED LEDGER REQUIREMENT:** When a shared subagent review ledger is provided, every subagent must read and update that ledger before returning final results. The main agent must use the ledger as the source of truth for merging, status updates, duplicate suppression, proposed final comments, and the final convergence round.
+4. **Always read and respond to Part 1** (General Principles) — it applies to all code.
+5. For module-specific review, **read the `AGENTS.md` in the corresponding source directory** listed in Part 2. Those files contain non-obvious conventions and traps specific to each subsystem.
+6. Parts 3–7 cover cross-module concerns, testing, high-risk patterns, functions, and standards — refer as needed.
 
 ---
 

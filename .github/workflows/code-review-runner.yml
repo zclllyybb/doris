@@ -285,14 +285,25 @@ jobs:
           - User review focus: PLACEHOLDER_CONTEXT_DIR/review_focus.txt
           - PR changed files: PLACEHOLDER_CONTEXT_DIR/pr_changed_files.txt
           - Required AGENTS.md files: PLACEHOLDER_CONTEXT_DIR/required_agents.txt
+          - Shared subagent review ledger: PLACEHOLDER_CONTEXT_DIR/subagent_review_findings.md
 
           Before reviewing any code, you MUST read and follow the code review skill in this repository. During review, you must strictly follow those instructions.
           At the start of the review, you MUST call create_goal with a concrete objective to complete an exhaustive review of this PR. Do not claim the review is complete unless the create_goal goal was created and satisfied.
+          Your goal todo list MUST include, and you must keep it current throughout the review:
+          - Read the review prompt, code-review skill, required AGENTS.md files, existing review threads, user focus, changed-file list, and the shared subagent review ledger.
+          - Spawn the required focused subagents and require them to maintain the shared subagent review ledger before returning final subagent results.
+          - Read the shared ledger after every subagent update and independently verify, deduplicate, accept, or dismiss every candidate.
+          - Run at least one final convergence round where every live subagent reviews the current ledger and proposed final comment set.
+          - Continue reviewing if any subagent reports a new valuable candidate during convergence; repeat verification and convergence until every subagent says `NO_NEW_VALUABLE_FINDINGS` for the same current ledger/comment set.
+          - Submit the final GitHub review and verify that all accepted comments landed before marking the goal complete.
           You MUST maintain that goal until every suspicious point found during review has a clear conclusion: submitted as an inline issue, dismissed as already covered by existing review context, or dismissed with concrete code evidence explaining why it is not a bug.
           You MUST use the available subagent or multi-agent spawn tool for this review; do not merely simulate subagent output in your own text. If tool discovery is needed, search for the subagent/multi-agent tool first. Spawn at least two subagents before final submission:
           - one subagent focused on optimizer/rewrite correctness, semantic equivalence, and parallel join/aggregate paths.
           - one subagent focused on regression tests, expected outputs, session/config propagation, compatibility, and basic CI/style failures.
-          Subagents must only report candidate findings with evidence. The main agent must read their results, independently verify or dismiss every candidate with concrete code evidence, deduplicate against existing review threads, and submit the final GitHub review itself. The final summary must include a short "Subagent conclusions" section describing which subagent candidates became inline comments and which were dismissed.
+          The shared subagent review ledger is PLACEHOLDER_CONTEXT_DIR/subagent_review_findings.md. Before spawning any subagent, the main agent MUST read this ledger. Every subagent prompt MUST include this ledger path and require the subagent to read the current ledger before reviewing, avoid duplicating existing candidates, and update the ledger before returning final subagent results. Subagents must maintain candidate findings in that shared document with stable IDs, path/line, claim, evidence, duplicate relationship if any, and recommendation. They may edit only this shared ledger file and must not submit GitHub comments.
+          The main agent must read the shared ledger after each subagent result, merge duplicate candidates, update candidate statuses, and keep a proposed final comment set in the ledger. Statuses must distinguish at least: proposed_by_subagent, accepted_for_inline_comment, dismissed_with_evidence, duplicate_of_existing_thread, duplicate_of_candidate, and needs_more_evidence.
+          Before final submission, the main agent MUST send the current ledger and proposed final comment set to every live subagent and require a convergence response. A subagent may either update the ledger with a new valuable candidate or reply exactly `NO_NEW_VALUABLE_FINDINGS` for the current ledger/comment set. The main agent MUST NOT complete the goal, final summary, or GitHub review until every live subagent has returned `NO_NEW_VALUABLE_FINDINGS` in the same convergence round after the last accepted or dismissed candidate update.
+          Subagents must only report candidate findings with evidence. The main agent must read their results and the shared ledger, independently verify or dismiss every candidate with concrete code evidence, deduplicate against existing review threads, and submit the final GitHub review itself. The final summary must include a short "Subagent conclusions" section describing which subagent candidates became inline comments, which were dismissed, and which convergence round ended with all subagents reporting `NO_NEW_VALUABLE_FINDINGS`.
           If and only if the runtime exposes no subagent or multi-agent tool after explicit discovery, state that limitation in the final summary and continue the review manually.
           You MUST NOT stop after finding the first blocking issue. Keep reviewing changed files, related control flow, tests, and parallel/special-case paths until all plausible correctness, lifecycle, configuration, compatibility, performance, and coverage bugs have been investigated and every bug you can substantiate has been reported.
           Before submitting the final review, do one explicit final sweep over the changed-file list and your unresolved candidate list. Only finish when there are no unresolved suspicious points and all possible substantiated bugs have been pointed out in the GitHub review.
@@ -335,10 +346,53 @@ jobs:
           prompt_path.write_text(prompt.replace("PLACEHOLDER_REQUIRED_AGENTS_BLOCK", required_agents))
           PY
 
+          cat > "$REVIEW_CONTEXT_DIR/subagent_review_findings.md" <<'LEDGER'
+          # Shared Subagent Review Ledger
+
+          This is the shared source of truth for subagent-assisted review.
+
+          Rules:
+          - Subagents must read this file before reviewing and update it before returning their final subagent result.
+          - Subagents may edit only this file. They must not submit GitHub comments.
+          - Avoid duplicates. If a candidate overlaps an existing candidate, add evidence to that candidate and mark the relationship instead of creating a new one.
+          - The main agent owns final status, final deduplication, GitHub review submission, and GitHub API verification.
+          - The goal is not complete until all live subagents have reviewed the current ledger and proposed final comment set in the same convergence round and replied `NO_NEW_VALUABLE_FINDINGS`.
+
+          Candidate statuses:
+          - proposed_by_subagent
+          - accepted_for_inline_comment
+          - dismissed_with_evidence
+          - duplicate_of_existing_thread
+          - duplicate_of_candidate
+          - needs_more_evidence
+
+          ## Candidate Findings
+
+          Use this format for every candidate:
+
+          - ID:
+            Owner:
+            Status:
+            Path:
+            Line:
+            Claim:
+            Evidence:
+            Duplicate relationship:
+            Main verification:
+            Proposed inline body:
+
+          ## Dismissed Or Duplicate Points
+
+          ## Proposed Final Comment Set
+
+          ## Convergence Rounds
+          LEDGER
+
           cat > "$REVIEW_CONTEXT_DIR/codex_goal_prompt.txt" <<EOF
           You are performing an automated code review inside a GitHub Actions runner.
           This invocation is already running in Codex goal mode. Before inspecting the PR diff or related code, read ${REVIEW_CONTEXT_REL}/review_prompt.txt verbatim and follow that file as the complete review instruction set.
-          This review must use the available subagent or multi-agent spawn tool for focused review passes, then the main agent must verify, deduplicate, summarize subagent conclusions, and submit the final GitHub review.
+          This review must use the available subagent or multi-agent spawn tool for focused review passes. All subagents and the main agent must maintain ${REVIEW_CONTEXT_REL}/subagent_review_findings.md as the shared source of truth, then the main agent must verify, deduplicate, summarize subagent conclusions, and submit the final GitHub review.
+          Your goal todo list must include shared-ledger review, subagent spawning, candidate verification, a final subagent convergence round, GitHub review submission, and GitHub API verification. Do not complete the goal unless every live subagent has replied NO_NEW_VALUABLE_FINDINGS for the same current ledger/comment set after the last candidate update.
           Keep reviewing until every suspicious point has a clear conclusion, every substantiated issue has been submitted as a GitHub inline review comment, and no new valuable review comment remains possible.
           EOF
         env:
