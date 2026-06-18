@@ -73,6 +73,24 @@ jobs:
           unzip -q "$tmp_dir/ossutil.zip" -d "$tmp_dir"
           sudo install -m 0755 "$tmp_dir/ossutil-v1.7.19-linux-amd64/ossutil" /usr/local/bin/ossutil
 
+      - name: Install Codex goal binary
+        run: |
+          codex_cmd="$(command -v codex)"
+          codex_target="$(readlink -f "$codex_cmd")"
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+
+          ossutil -i "$OSS_AK" -k "$OSS_SK" -e "$OSS_ENDPOINT" cp -f "$OSS_CODEX_GOAL_OBJECT" "$tmp_dir/codex-goal"
+          test -s "$tmp_dir/codex-goal"
+          sudo install -m 0755 "$tmp_dir/codex-goal" "$codex_target"
+          "$codex_cmd" exec --help | grep -q -- '--goal'
+          "$codex_cmd" --version
+        env:
+          OSS_AK: ${{ secrets.OSS_AK }}
+          OSS_SK: ${{ secrets.OSS_SK }}
+          OSS_ENDPOINT: oss-cn-hongkong.aliyuncs.com
+          OSS_CODEX_GOAL_OBJECT: oss://doris-community-ci/codex/codex-goal
+
       - name: Configure Codex auth
         run: |
           install -m 700 -d "$RUNNER_TEMP/codex-home"
@@ -326,7 +344,7 @@ jobs:
           set +e
           # GitHub-hosted runners are ephemeral. Avoid workspace-write here because
           # Codex uses bubblewrap for that mode and uid maps can be unavailable.
-          codex exec "$PROMPT" \
+          codex exec --goal "$PROMPT" \
             --cd "$GITHUB_WORKSPACE" \
             --model "gpt-5.5" \
             --config "model_reasoning_effort=\"${REASONING_EFFORT}\"" \
