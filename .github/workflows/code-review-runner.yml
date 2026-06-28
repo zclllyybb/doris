@@ -334,7 +334,7 @@ jobs:
           cat > "$REVIEW_CONTEXT_DIR/review_prompt.txt" <<'PROMPT'
           You are performing an automated code review inside a GitHub Actions runner. The gh CLI is available and authenticated via GH_TOKEN.
           The current directory is the code repository for the PR to be reviewed.
-          This invocation is already running as a Codex goal. This file is the complete goal prompt.
+          This invocation is already running as a Codex goal. This file is the complete review instruction set; the short Codex goal objective points to these instructions because goal mode limits objective length.
           This environment is only used for review operations, so do not attempt builds, test-suite runs, dependency installation, environment repair, or source-code modifications. Temporary scripts and notes under the review context directory are allowed when they only support review.
           This GitHub Actions checkout is not a local Doris development worktree. Do not run hooks/setup_worktree.sh and do not try to initialize thirdparty/installed.
           You MUST NOT attempt to access any files outside the current directory. You do not need outside files. This does not prevent normal use of repository skills or web-fetch tools.
@@ -518,13 +518,13 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           HEAD_SHA: ${{ inputs.head_sha }}
         run: |
-          REVIEW_PROMPT="$(cat "$REVIEW_CONTEXT_DIR/review_prompt.txt")"
+          REVIEW_GOAL="Automated PR review for ${REPO}#${PR_NUMBER}. Read the full review instructions from stdin, follow the code-review skill and required AGENTS files, use focused subagents with the shared ledger, reach convergence where every live subagent has no new valuable findings, submit the GitHub review, and verify it landed on ${HEAD_SHA}."
           review_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           set +e
           # GitHub-hosted runners are ephemeral. Avoid workspace-write here because
           # Codex uses bubblewrap for that mode and uid maps can be unavailable.
-          codex exec --goal "$REVIEW_PROMPT" \
+          codex exec \
             --cd "$GITHUB_WORKSPACE" \
             --model "gpt-5.5" \
             --config "model_reasoning_effort=xhigh" \
@@ -532,6 +532,9 @@ jobs:
             --color never \
             --json \
             --output-last-message "$REVIEW_CONTEXT_DIR/codex-final-message.txt" \
+            --goal \
+            "$REVIEW_GOAL" \
+            < "$REVIEW_CONTEXT_DIR/review_prompt.txt" \
             > "$REVIEW_CONTEXT_DIR/codex-events.jsonl" \
             2> >(tee "$REVIEW_CONTEXT_DIR/codex-stderr.log" >&2)
           status=$?
