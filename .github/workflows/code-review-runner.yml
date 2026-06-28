@@ -332,88 +332,34 @@ jobs:
       - name: Prepare review prompt
         run: |
           cat > "$REVIEW_CONTEXT_DIR/review_prompt.txt" <<'PROMPT'
-          You are performing an automated code review inside a GitHub Actions runner. The gh CLI is available and authenticated via GH_TOKEN.
-          The current directory is the code repository for the PR to be reviewed.
-          This invocation is already running as a Codex goal. This file is the complete review instruction set; the short Codex goal objective points to these instructions because goal mode limits objective length.
-          This environment is only used for review operations, so do not attempt builds, test-suite runs, dependency installation, environment repair, or source-code modifications. Temporary scripts and notes under the review context directory are allowed when they only support review.
-          This GitHub Actions checkout is not a local Doris development worktree. Do not run hooks/setup_worktree.sh and do not try to initialize thirdparty/installed.
-          You MUST NOT attempt to access any files outside the current directory. You do not need outside files. This does not prevent normal use of repository skills or web-fetch tools.
-          You can comment on the pull request.
+          Automated GitHub PR review goal. gh is authenticated. Do not access outside this repo. Do not build, run test suites, install deps, repair env, edit source, run hooks/setup_worktree.sh, or initialize thirdparty/installed. Review-only notes/scripts under the context dir are OK.
 
-          Context:
-          - Repository: PLACEHOLDER_REPO
-          - PR number: PLACEHOLDER_PR_NUMBER
-          - PR Head SHA: PLACEHOLDER_HEAD_SHA
-          - PR Base SHA: PLACEHOLDER_BASE_SHA
-          - Existing inline review threads: PLACEHOLDER_CONTEXT_DIR/pr_review_threads.md
-          - Raw inline review comments JSON: PLACEHOLDER_CONTEXT_DIR/pr_review_comments.json
-          - Structured known findings: PLACEHOLDER_CONTEXT_DIR/known_findings.json
-          - User review focus: PLACEHOLDER_CONTEXT_DIR/review_focus.txt
-          - Authoritative PR changed files: PLACEHOLDER_CONTEXT_DIR/current_pr_files.txt
-          - Authoritative PR file metadata and patches: PLACEHOLDER_CONTEXT_DIR/current_pr_files.json
-          - Authoritative PR diff: PLACEHOLDER_CONTEXT_DIR/current_pr.diff
-          - Required AGENTS.md files: PLACEHOLDER_CONTEXT_DIR/required_agents.txt
-          - Shared subagent review ledger: PLACEHOLDER_CONTEXT_DIR/subagent_review_findings.md
+          Context: PLACEHOLDER_REPO#PLACEHOLDER_PR_NUMBER head PLACEHOLDER_HEAD_SHA base PLACEHOLDER_BASE_SHA. Before code, read .claude/skills/code-review/SKILL.md; every path in PLACEHOLDER_CONTEXT_DIR/required_agents.txt; PLACEHOLDER_CONTEXT_DIR/pr_review_threads.md; PLACEHOLDER_CONTEXT_DIR/known_findings.json; PLACEHOLDER_CONTEXT_DIR/review_focus.txt; PLACEHOLDER_CONTEXT_DIR/current_pr_files.txt; PLACEHOLDER_CONTEXT_DIR/current_pr_files.json; PLACEHOLDER_CONTEXT_DIR/current_pr.diff; PLACEHOLDER_CONTEXT_DIR/subagent_review_findings.md.
 
-          Authoritative review scope:
-          - PLACEHOLDER_CONTEXT_DIR/current_pr.diff and PLACEHOLDER_CONTEXT_DIR/current_pr_files.txt are the only authoritative PR scope. Do not use local two-dot or three-dot git diff ranges to decide what belongs to this PR.
-          - You may inspect related repository code for context, but every final candidate must cite scope evidence from the authoritative PR diff or file list.
-          - For any path outside the authoritative changed-file list, first prove it exists in this checkout with git ls-files or rg --files before reading it. If a guessed path is missing, stop guessing in that directory and return to the repository file index.
-          - Before proposing a duplicate-looking issue, read PLACEHOLDER_CONTEXT_DIR/known_findings.json and PLACEHOLDER_CONTEXT_DIR/pr_review_threads.md. Do not resubmit a substantially similar issue unless the current authoritative diff proves this is a distinct still-uncovered instance.
+          Scope: current_pr.diff and current_pr_files.txt are the only PR scope. Do not use local git diff ranges to decide membership. For related files, first prove existence with git ls-files or rg --files. Every final candidate needs scope evidence from the PR diff/list. Do not duplicate known findings unless this diff proves a distinct uncovered instance.
 
-          Required review process:
-          - Before reviewing code, read this prompt, .claude/skills/code-review/SKILL.md, every required AGENTS.md file below, the existing review context, the user focus, the authoritative file list and diff, and the shared ledger.
-          - The main agent must first write a PR-wide review plan into the shared ledger. The plan must split the whole PR into focused review areas, assign each area to a subagent section, and show how the split covers every applicable Critical Checkpoint from the code-review skill.
-          - Use the available subagent or multi-agent spawn tool for focused review passes. Do not merely simulate subagent output in your own text. If tool discovery is needed, search for the subagent/multi-agent tool first.
-          - Spawn enough focused subagents to cover the review plan, with at least two live subagents unless the PR is a trivially small documentation-only change or the runtime exposes no usable subagent tool. Each subagent must receive the authoritative diff, file list, known findings, required AGENTS list, shared ledger path, exact assigned ledger section, and its focused review area.
-          - Every subagent must read the whole shared ledger before reviewing, avoid duplicate candidates, append only to its assigned section, and never edit another section, edit source files, or submit GitHub comments.
-          - Every subagent candidate must include a stable ID, path/line, claim, scope evidence from the authoritative PR diff or file list, code evidence, related Critical Checkpoint, duplicate relationship if any, recommendation, and the key review effort used to reach the conclusion.
-          - The main agent must read the ledger after every subagent result, independently verify or dismiss each candidate with concrete code evidence, deduplicate against known findings and other candidates, and maintain the main-owned merged findings, dismissed findings, Critical Checkpoint conclusions, and proposed final comment set.
-          - The main agent must not stop after the first blocking issue. Continue through changed files, related control flow, tests, parallel paths, compatibility paths, lifecycle, concurrency, configuration, observability, performance, and coverage concerns until every suspicious point has a clear conclusion.
-          - Before final submission, run a convergence round: send the current ledger and proposed final comment set to every live subagent. A subagent may append a new valuable candidate under its assigned section or reply exactly `NO_NEW_VALUABLE_FINDINGS` for that same ledger/comment set.
-          - If convergence adds a new valuable candidate, the main agent must verify/dismiss/accept it, update the ledger, and run another convergence round. Do not complete the goal until every live subagent returns `NO_NEW_VALUABLE_FINDINGS` in the same convergence round after the last candidate update.
-          - Do not retry a broken subagent interaction indefinitely. If a subagent tool call returns no usable body or errors twice, record the failure in the ledger, mark that subagent not live, perform the missed focused review in the main agent, and do not spawn unbounded replacements. Use at most three convergence rounds total; if that limit is reached, record the remaining limitation and perform a final main-agent sweep before submitting.
-          - Submit the final GitHub review yourself and verify through GitHub API that the review landed on PLACEHOLDER_HEAD_SHA before considering the goal complete.
+          Main process: first write the PR-wide plan into the ledger: focus split, subagent assignments, Critical Checkpoint coverage, and planned effort. Use the subagent/multi-agent tool; do not simulate it. Spawn at least two live focused subagents unless the PR is tiny docs-only or no usable tool exists. Each subagent gets this context, PR diff/files, known findings, required AGENTS list, ledger path, owned section, and focus. Subagents append only to their section, never edit source or comment, and record stable candidate IDs with path/line, claim, scope evidence, code evidence, Critical Checkpoint, duplicate relation, recommendation, and key effort.
 
-          Goal completion standard:
-          - The shared ledger contains the PR-wide plan, all subagent sections, all candidate decisions, Critical Checkpoint conclusions, final comment set, convergence results, and key review efforts.
-          - Every applicable Critical Checkpoint from the code-review skill has a conclusion backed by code evidence or is explicitly marked not applicable with a reason.
-          - Every suspicious point found by the main agent or subagents is either submitted as an inline issue, dismissed as already covered by existing review context, dismissed with concrete code evidence, or merged as a duplicate of another candidate.
-          - All substantiated issues that can produce valuable review comments have been submitted, and no live subagent has more valuable findings for the current ledger/comment set.
-          Before inspecting the PR diff or related code, you MUST read the contents of every AGENTS.md file listed below. These paths are computed from the PR changed file ancestors in this checkout. Searching for or listing paths is not sufficient; read each listed file directly.
-          Required AGENTS.md files for this PR:
-          PLACEHOLDER_REQUIRED_AGENTS_BLOCK
-          You MUST also read PLACEHOLDER_CONTEXT_DIR/review_focus.txt. Perform a complete review of the whole PR as usual, and additionally pay special attention to the user-provided focus points from that file.
-          In the final summary, include a short response to the user focus points, including when no additional issue was found for them.
+          Main agent reads the ledger after each subagent result, verifies/dismisses/dedupes candidates with code evidence, and maintains merged findings, dismissed findings, Critical Checkpoint conclusions, and final comments. Do not stop at the first blocker: cover changed files, related flow, tests, parallel paths, compatibility, lifecycle, concurrency, config, observability, performance, and coverage until every suspicious point has a conclusion.
 
-          ## Final response format
-          - After completing the review, provide a final summary opinion based on the rules defined in AGENTS.md and the code-review skill. The summary must include the applicable Critical Checkpoint conclusions, key review efforts, and a short "Subagent conclusions" section describing which candidates became inline comments, which were dismissed, which duplicates were merged, and which convergence round ended with all live subagents reporting `NO_NEW_VALUABLE_FINDINGS`.
-          - If the overall quality of PR is good and there are no critical blocking issues (even if there are some tolerable minor issues), submit an opinion on approval using: gh pr review PLACEHOLDER_PR_NUMBER --comment --body "<summary>"
-              - Note that when submitting review comments in this way, the content will not be escaped, so you need to input multi-line text with line breaks directly, rather than using `\n`.
-          - If issues found, submit a review with inline comments plus a comprehensive summary body. Use GitHub Reviews API to ensure comments are inline:
-              - Inline comment bodies may include GitHub suggested changes blocks when you can propose a precise patch.
-              - Prefer suggested changes for small, self-contained fixes (for example typos, trivial refactors, or narrowly scoped code corrections).
-              - Do not force suggested changes for broad, architectural, or multi-file issues; explain those normally.
-              - Build a JSON array of comments like: [{ "path": "<file>", "position": <diff_position>, "body": "..." }]
-              - Submit via: gh api repos/PLACEHOLDER_REPO/pulls/PLACEHOLDER_PR_NUMBER/reviews --input <json_file>
-              - The JSON file should contain: {"event":"REQUEST_CHANGES","body":"<summary>","comments":[...]}
-          - A complete and detailed review of the entire PR must be conducted, identifying all potential issues and submitting corresponding comments. Only then can the review work be considered finished. If this standard is not strictly met, the review of the remaining parts must continue.
+          Convergence: before final review, send the current ledger and proposed final comments to every live subagent. Finish only after the same convergence round returns NO_NEW_VALUABLE_FINDINGS from every live subagent after the last candidate update. If a subagent interaction has no usable body or errors twice, record it, mark that subagent not live, and the main agent must cover its focus. Use at most three convergence rounds, then record any limitation and do a final main sweep.
+
+          Completion requires: every applicable Critical Checkpoint has evidence or N/A reason in ledger/final summary; every suspicious point is accepted, dismissed with evidence, covered by existing review, or duplicate; all valuable substantiated issues are submitted; GitHub review is verified on PLACEHOLDER_HEAD_SHA.
+
+          Final response: include checkpoint conclusions, key efforts, user-focus response, and Subagent conclusions. If no blocker, use `gh pr review PLACEHOLDER_PR_NUMBER --comment --body "<summary>"`.
+          - Note that when submitting review comments in this way, the content will not be escaped, so you need to input multi-line text with line breaks directly, rather than using `\n`.
+          If issues exist, submit inline comments through GitHub Reviews API JSON: {"event":"REQUEST_CHANGES","body":"<summary>","comments":[{"path":"<file>","position":<diff_position>,"body":"..."}]}. Use suggested changes only for precise small fixes.
           PROMPT
           sed -i "s|PLACEHOLDER_REPO|${REPO}|g" "$REVIEW_CONTEXT_DIR/review_prompt.txt"
           sed -i "s|PLACEHOLDER_PR_NUMBER|${PR_NUMBER}|g" "$REVIEW_CONTEXT_DIR/review_prompt.txt"
           sed -i "s|PLACEHOLDER_HEAD_SHA|${HEAD_SHA}|g" "$REVIEW_CONTEXT_DIR/review_prompt.txt"
           sed -i "s|PLACEHOLDER_BASE_SHA|${BASE_SHA}|g" "$REVIEW_CONTEXT_DIR/review_prompt.txt"
           sed -i "s|PLACEHOLDER_CONTEXT_DIR|${REVIEW_CONTEXT_REL}|g" "$REVIEW_CONTEXT_DIR/review_prompt.txt"
-          python3 - "$REVIEW_CONTEXT_DIR/review_prompt.txt" "$REVIEW_CONTEXT_DIR/required_agents_prompt.txt" <<'PY'
-          import sys
-          from pathlib import Path
-
-          prompt_path = Path(sys.argv[1])
-          required_agents_path = Path(sys.argv[2])
-          prompt = prompt_path.read_text()
-          required_agents = required_agents_path.read_text().rstrip()
-          prompt_path.write_text(prompt.replace("PLACEHOLDER_REQUIRED_AGENTS_BLOCK", required_agents))
-          PY
+          prompt_chars="$(wc -m < "$REVIEW_CONTEXT_DIR/review_prompt.txt")"
+          if [ "$prompt_chars" -gt 4000 ]; then
+            echo "Review prompt is too large for Codex goal mode: ${prompt_chars} characters."
+            exit 1
+          fi
 
           cat > "$REVIEW_CONTEXT_DIR/subagent_review_findings.md" <<'LEDGER'
           # Shared Subagent Review Ledger
@@ -518,13 +464,13 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           HEAD_SHA: ${{ inputs.head_sha }}
         run: |
-          REVIEW_GOAL="Automated PR review for ${REPO}#${PR_NUMBER}. Read the full review instructions from stdin, follow the code-review skill and required AGENTS files, use focused subagents with the shared ledger, reach convergence where every live subagent has no new valuable findings, submit the GitHub review, and verify it landed on ${HEAD_SHA}."
+          REVIEW_PROMPT="$(cat "$REVIEW_CONTEXT_DIR/review_prompt.txt")"
           review_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           set +e
           # GitHub-hosted runners are ephemeral. Avoid workspace-write here because
           # Codex uses bubblewrap for that mode and uid maps can be unavailable.
-          codex exec \
+          codex exec --goal "$REVIEW_PROMPT" \
             --cd "$GITHUB_WORKSPACE" \
             --model "gpt-5.5" \
             --config "model_reasoning_effort=xhigh" \
@@ -532,9 +478,6 @@ jobs:
             --color never \
             --json \
             --output-last-message "$REVIEW_CONTEXT_DIR/codex-final-message.txt" \
-            --goal \
-            "$REVIEW_GOAL" \
-            < "$REVIEW_CONTEXT_DIR/review_prompt.txt" \
             > "$REVIEW_CONTEXT_DIR/codex-events.jsonl" \
             2> >(tee "$REVIEW_CONTEXT_DIR/codex-stderr.log" >&2)
           status=$?
