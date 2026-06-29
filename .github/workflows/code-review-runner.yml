@@ -338,11 +338,11 @@ jobs:
 
           Scope: current_pr.diff and current_pr_files.txt are the only PR scope. Do not use local git diff ranges to decide membership. For related files, first prove existence with git ls-files or rg --files. Every final candidate needs scope evidence from the PR diff/list. Do not duplicate known findings unless this diff proves a distinct uncovered instance.
 
-          Main process: write a coordinator plan, then use the subagent/multi-agent tool. Do not split the PR into focus-specific reviewers. Each round runs in one full-scope subagent session that reviews the whole PR and appends one completed Review Progress Form. Main must not independently review code; it only reads context, launches subagents, inspects forms, requests another round, computes mechanical diff positions, submits subagent-proposed comments, and verifies GitHub API results.
+          Main process: write a coordinator plan, then use the subagent/multi-agent tool. Do not split focus. Each round runs one fresh full-scope subagent over the whole PR. The subagent MUST NOT inherit main conversation/context; use a no-inherit/fresh-context option if available. Its prompt must be self-contained with all required paths and say prior forms are only clues. Main must not independently review code; it only reads context, launches fresh subagents, inspects forms, requests rounds, computes diff positions, submits subagent-proposed comments, and verifies GitHub API results.
 
-          Subagent form: each subagent reviews changed files, related flow, tests, parallel paths, compatibility, lifecycle, concurrency, config, observability, performance, and coverage. For every applicable Critical Checkpoint and user-focus point, fill status complete/incomplete/blocked/N/A, evidence, accepted findings, dismissed suspicions, unresolved suspicions, remaining work, and whether another round is needed. Findings need stable IDs, path/line, scope evidence from current_pr.diff/list, code evidence, duplicate relation, recommendation, and exact proposed inline body. Do not duplicate known findings unless this diff proves a distinct uncovered instance.
+          Subagent form: each subagent reviews changed files, related flow, tests, parallel paths, compatibility, lifecycle, concurrency, config, observability, performance, and coverage. For every applicable Critical Checkpoint/focus point, fill status complete/incomplete/blocked/N/A, evidence, accepted findings, dismissed suspicions, unresolved suspicions, remaining work, and whether another round is needed. Findings need stable IDs, path/line, PR-scope evidence, code evidence, duplicate relation, recommendation, and exact proposed inline body.
 
-          Round control: after each subagent returns, main reads only the completed form. If any checkpoint/focus is incomplete, blocked, has unresolved suspicions, says another round is needed, or lacks evidence, main must start another full-scope subagent round and pass all prior forms plus the exact gap list. Continue until a round form says all applicable checkpoints/focus points are complete, no unresolved valuable suspicion remains, and the final comment set is ready. Use at most four rounds; if still unresolved, submit all substantiated comments and report the limitation.
+          Round control: after each subagent returns, main reads only the form. Run fresh full-scope rounds until 3 rounds complete, or a round explicitly states `NO_NEW_VALUABLE_COMMENTS` with complete checkpoints/focus and no unresolved valuable suspicion. Prior forms must be visible to later rounds but not trusted; use them only to guide deeper re-checks of accepted/dismissed claims and missed issues. If no round reaches that marker, stop after round 3, submit all substantiated comments, and report limits.
 
           Completion requires: the latest subagent form covers every applicable Critical Checkpoint with evidence or N/A reason; every suspicious point is accepted, dismissed with evidence, covered by existing review, duplicate, or explicitly unresolved after max rounds; all valuable substantiated issues from the subagent forms are submitted; GitHub review is verified on PLACEHOLDER_HEAD_SHA.
 
@@ -369,10 +369,12 @@ jobs:
           Rules:
           - The main agent coordinates only: it starts rounds, reads forms, decides whether another round is required, submits final comments, and verifies GitHub API results.
           - The main agent must not independently review code for new findings.
-          - Each review round uses one full-scope subagent session, not multiple focus-split subagents.
-          - Each subagent must read this whole file and append exactly one completed Review Progress Form under its own round section.
+          - Each review round uses one fresh full-scope subagent session, not multiple focus-split subagents.
+          - Spawned subagents must not inherit main-agent conversation/context; their prompt must be self-contained.
+          - Each subagent must read this whole file, including prior forms, and append exactly one completed Review Progress Form under its own round section.
+          - Prior forms are not trusted facts. Later subagents use them only as leads for deeper re-checking, not as proof.
           - Subagents must not rewrite this file, edit another section, edit repository source files, or submit GitHub comments.
-          - If a form leaves any checkpoint/focus incomplete, blocked, weakly evidenced, or unresolved, the main agent must launch another full-scope subagent round with those gaps.
+          - Main must run fresh full-scope rounds until round 3 completes, unless a round explicitly states `NO_NEW_VALUABLE_COMMENTS` with complete evidence and no unresolved valuable suspicion.
 
           Candidate statuses:
           - proposed_by_subagent
@@ -404,7 +406,9 @@ jobs:
             Context read:
             Scope reviewed:
             Overall status: complete / incomplete / blocked
+            Completion marker: NO_NEW_VALUABLE_COMMENTS / NEW_COMMENTS_FOUND / INCOMPLETE
             Needs another round: yes / no
+            Prior-form rechecks:
             Missing or weak areas:
             Remaining unresolved suspicions:
             User-focus conclusion:
