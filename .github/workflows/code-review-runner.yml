@@ -346,7 +346,7 @@ jobs:
 
           Round control: after each subagent returns, main reads only the report. Prior forms must be visible to later rounds but not trusted; use them only to guide deeper re-checks of accepted/dismissed claims and missed issues. Main must launch another fresh full-scope round whenever this round produced any new valuable non-duplicate Comment Finding. The only way to stop launching rounds is that main finds this round produced no new valuable Comment Finding. Then main submits all substantiated non-duplicate comments from the reports and verifies GitHub API results.
 
-          Completion requires: the latest round added no new valuable Comment Finding; every valuable substantiated non-duplicate Comment Finding from reports is submitted; GitHub review is verified on PLACEHOLDER_HEAD_SHA.
+          Completion requires: the latest round added no new valuable Comment Finding; every valuable substantiated non-duplicate Comment Finding from reports is submitted; a new GitHub review from this run is verified on PLACEHOLDER_HEAD_SHA. Existing reviews/comments do not count.
 
           Final response: include round count, last-round reason, checkpoint summary, focus response, and submitted comment IDs. If no blocker, use `gh pr review PLACEHOLDER_PR_NUMBER --comment --body "<summary>"`; content is not escaped, so input real newlines, not `\n`. If issues exist, submit inline comments through GitHub Reviews API JSON.
           PROMPT
