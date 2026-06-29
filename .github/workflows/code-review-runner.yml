@@ -338,15 +338,15 @@ jobs:
 
           Scope: current_pr.diff and current_pr_files.txt are the only PR scope. Do not use local git diff ranges to decide membership. For related files, first prove existence with git ls-files or rg --files. Every final candidate needs scope evidence from the PR diff/list. Do not duplicate known findings unless this diff proves a distinct uncovered instance.
 
-          Main process: first write the PR-wide plan into the ledger: focus split, subagent assignments, Critical Checkpoint coverage, and planned effort. Use the subagent/multi-agent tool; do not simulate it. Spawn at least two live focused subagents unless the PR is tiny docs-only or no usable tool exists. Each subagent gets this context, PR diff/files, known findings, required AGENTS list, ledger path, owned section, and focus. Subagents append only to their section, never edit source or comment, and record stable candidate IDs with path/line, claim, scope evidence, code evidence, Critical Checkpoint, duplicate relation, recommendation, and key effort.
+          Main process: write a coordinator plan, then use the subagent/multi-agent tool. Do not split the PR into focus-specific reviewers. Each round runs in one full-scope subagent session that reviews the whole PR and appends one completed Review Progress Form. Main must not independently review code; it only reads context, launches subagents, inspects forms, requests another round, computes mechanical diff positions, submits subagent-proposed comments, and verifies GitHub API results.
 
-          Main agent reads the ledger after each subagent result, verifies/dismisses/dedupes candidates with code evidence, and maintains merged findings, dismissed findings, Critical Checkpoint conclusions, and final comments. Do not stop at the first blocker: cover changed files, related flow, tests, parallel paths, compatibility, lifecycle, concurrency, config, observability, performance, and coverage until every suspicious point has a conclusion.
+          Subagent form: each subagent reviews changed files, related flow, tests, parallel paths, compatibility, lifecycle, concurrency, config, observability, performance, and coverage. For every applicable Critical Checkpoint and user-focus point, fill status complete/incomplete/blocked/N/A, evidence, accepted findings, dismissed suspicions, unresolved suspicions, remaining work, and whether another round is needed. Findings need stable IDs, path/line, scope evidence from current_pr.diff/list, code evidence, duplicate relation, recommendation, and exact proposed inline body. Do not duplicate known findings unless this diff proves a distinct uncovered instance.
 
-          Convergence: before final review, send the current ledger and proposed final comments to every live subagent. Finish only after the same convergence round returns NO_NEW_VALUABLE_FINDINGS from every live subagent after the last candidate update. If a subagent interaction has no usable body or errors twice, record it, mark that subagent not live, and the main agent must cover its focus. Use at most three convergence rounds, then record any limitation and do a final main sweep.
+          Round control: after each subagent returns, main reads only the completed form. If any checkpoint/focus is incomplete, blocked, has unresolved suspicions, says another round is needed, or lacks evidence, main must start another full-scope subagent round and pass all prior forms plus the exact gap list. Continue until a round form says all applicable checkpoints/focus points are complete, no unresolved valuable suspicion remains, and the final comment set is ready. Use at most four rounds; if still unresolved, submit all substantiated comments and report the limitation.
 
-          Completion requires: every applicable Critical Checkpoint has evidence or N/A reason in ledger/final summary; every suspicious point is accepted, dismissed with evidence, covered by existing review, or duplicate; all valuable substantiated issues are submitted; GitHub review is verified on PLACEHOLDER_HEAD_SHA.
+          Completion requires: the latest subagent form covers every applicable Critical Checkpoint with evidence or N/A reason; every suspicious point is accepted, dismissed with evidence, covered by existing review, duplicate, or explicitly unresolved after max rounds; all valuable substantiated issues from the subagent forms are submitted; GitHub review is verified on PLACEHOLDER_HEAD_SHA.
 
-          Final response: include checkpoint conclusions, key efforts, user-focus response, and Subagent conclusions. If no blocker, use `gh pr review PLACEHOLDER_PR_NUMBER --comment --body "<summary>"`.
+          Final response: include latest form summary, round count, unresolved limits, checkpoint conclusions, focus response, and submitted comment IDs. If no blocker, use `gh pr review PLACEHOLDER_PR_NUMBER --comment --body "<summary>"`.
           - Note that when submitting review comments in this way, the content will not be escaped, so you need to input multi-line text with line breaks directly, rather than using `\n`.
           If issues exist, submit inline comments through GitHub Reviews API JSON: {"event":"REQUEST_CHANGES","body":"<summary>","comments":[{"path":"<file>","position":<diff_position>,"body":"..."}]}. Use suggested changes only for precise small fixes.
           PROMPT
@@ -364,16 +364,15 @@ jobs:
           cat > "$REVIEW_CONTEXT_DIR/subagent_review_findings.md" <<'LEDGER'
           # Shared Subagent Review Ledger
 
-          This is the shared source of truth for subagent-assisted review.
+          This is the shared source of truth for subagent-driven review.
 
           Rules:
-          - The main agent must first fill `Main Review Plan And Scope Split` before spawning subagents.
-          - Subagents must read this whole file before reviewing.
-          - Each subagent may append only to its assigned section under `Subagent Candidate Sections`.
-          - Subagents must not rewrite this file, edit another subagent section, edit main-owned sections, edit repository source files, or submit GitHub comments.
-          - Avoid duplicates. If a candidate overlaps an existing candidate, add a duplicate note in your own section that references the existing candidate ID.
-          - The main agent owns final status, Critical Checkpoint conclusions, final deduplication, GitHub review submission, and GitHub API verification.
-          - The goal is not complete until all live subagents have reviewed the current ledger and proposed final comment set in the same convergence round and replied `NO_NEW_VALUABLE_FINDINGS`.
+          - The main agent coordinates only: it starts rounds, reads forms, decides whether another round is required, submits final comments, and verifies GitHub API results.
+          - The main agent must not independently review code for new findings.
+          - Each review round uses one full-scope subagent session, not multiple focus-split subagents.
+          - Each subagent must read this whole file and append exactly one completed Review Progress Form under its own round section.
+          - Subagents must not rewrite this file, edit another section, edit repository source files, or submit GitHub comments.
+          - If a form leaves any checkpoint/focus incomplete, blocked, weakly evidenced, or unresolved, the main agent must launch another full-scope subagent round with those gaps.
 
           Candidate statuses:
           - proposed_by_subagent
@@ -384,34 +383,42 @@ jobs:
           - needs_more_evidence
           - subagent_tool_failure
 
-          ## Main Review Plan And Scope Split
+          ## Main Coordinator Plan
 
-          Main agent fills this before spawning subagents:
+          Main agent fills this before spawning the first subagent:
 
           - Authoritative files/diff read:
           - Existing review context read:
           - Required AGENTS read:
           - User focus read:
-          - PR-wide focus areas:
-          - Subagent assignments:
+          - Initial whole-PR focus areas:
           - Critical Checkpoint coverage map:
+          - Round limit:
 
-          ## Critical Checkpoint Conclusions
+          ## Review Round Forms
 
-          Main agent keeps one entry per applicable Critical Checkpoint:
+          Each subagent appends one form in a new `### Round N - Full Scope Subagent` section:
 
-          - Checkpoint:
-            Applicability:
-            Owners:
-            Conclusion:
-            Evidence:
-            Key review effort:
+          - Round:
+            Subagent:
+            Context read:
+            Scope reviewed:
+            Overall status: complete / incomplete / blocked
+            Needs another round: yes / no
+            Missing or weak areas:
+            Remaining unresolved suspicions:
+            User-focus conclusion:
+            Critical Checkpoint progress:
+              - Checkpoint:
+                Status: complete / incomplete / blocked / N/A
+                Evidence:
+                Findings:
+                Dismissed suspicions:
+                Remaining work:
 
           Candidate format:
 
           - ID:
-            Owner:
-            Status:
             Path:
             Line:
             Claim:
@@ -420,33 +427,21 @@ jobs:
             Related Critical Checkpoint:
             Duplicate relationship:
             Recommendation:
-            Key review effort:
-
-          ## Main Merged Findings
-
-          Main-owned format:
-
-          - ID:
-            Source IDs:
-            Owner: main
-            Status:
-            Path:
-            Line:
-            Claim:
-            Scope evidence:
-            Evidence:
-            Related Critical Checkpoint:
-            Duplicate relationship:
-            Main verification:
             Proposed inline body:
+            Proposed diff position or line/side:
 
-          ## Dismissed Or Duplicate Points
+          ## Main Round Decisions
 
-          ## Proposed Final Comment Set
+          Main records one decision after each round:
 
-          ## Convergence Rounds
+          - Round:
+            Decision: continue / submit
+            Reason based only on form:
+            Gaps passed to next round:
 
-          ## Subagent Candidate Sections
+          ## Final Comment Set From Subagent Forms
+
+          ## GitHub Submission Verification
           LEDGER
         env:
           REPO: ${{ github.repository }}
