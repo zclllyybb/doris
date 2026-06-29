@@ -340,13 +340,13 @@ jobs:
 
           Main process: write a coordinator plan, then use the subagent/multi-agent tool. Do not split focus. Each round runs one fresh full-scope subagent over the whole PR. The subagent MUST NOT inherit main conversation/context; use a no-inherit/fresh-context option if available. Every subagent prompt must start with: `Fresh no-inherit subagent: do not rely on parent conversation/context.` Its prompt must be self-contained with all required paths and say prior forms are only clues. Main must not independently review code; it only reads context, launches fresh subagents, inspects forms, requests rounds, computes diff positions, submits subagent-proposed comments, and verifies GitHub API results.
 
-          Subagent form: each subagent reviews changed files, related flow, tests, parallel paths, compatibility, lifecycle, concurrency, config, observability, performance, and coverage. For every applicable Critical Checkpoint/focus point, fill status complete/incomplete/blocked/N/A, evidence, accepted findings, dismissed suspicions, unresolved suspicions, remaining work, and whether another round is needed. Findings need stable IDs, path/line, PR-scope evidence, code evidence, duplicate relation, recommendation, and exact proposed inline body.
+          Subagent report: each subagent reviews changed files, related flow, tests, parallel paths, compatibility, lifecycle, concurrency, config, observability, performance, and coverage. It must answer every item in code-review skill Part 1.3 Critical Checkpoints, with applicability, current progress, evidence, comment-worthy findings, dismissed suspicions, and logic that still deserves deeper probing. It must list concrete Comment Findings with stable IDs, path/line, PR-scope evidence, code evidence, duplicate relation, recommendation, and exact proposed inline body. The subagent must not decide completion or whether another round is needed.
 
-          Round control: after each subagent returns, main reads only the form. Run fresh full-scope rounds until 3 rounds complete, or a round explicitly states `NO_NEW_VALUABLE_COMMENTS` with complete checkpoints/focus and no unresolved valuable suspicion. Prior forms must be visible to later rounds but not trusted; use them only to guide deeper re-checks of accepted/dismissed claims and missed issues. If no round reaches that marker, stop after round 3, submit all substantiated comments, and report limits.
+          Round control: after each subagent returns, main reads only the report. Prior forms must be visible to later rounds but not trusted; use them only to guide deeper re-checks of accepted/dismissed claims and missed issues. Main must launch another fresh full-scope round whenever this round produced any new valuable non-duplicate Comment Finding. The only way to stop launching rounds is that main finds this round produced no new valuable Comment Finding. Then main submits all substantiated non-duplicate comments from the reports and verifies GitHub API results.
 
-          Completion requires: the latest subagent form covers every applicable Critical Checkpoint with evidence or N/A reason; every suspicious point is accepted, dismissed with evidence, covered by existing review, duplicate, or explicitly unresolved after max rounds; all valuable substantiated issues from the subagent forms are submitted; GitHub review is verified on PLACEHOLDER_HEAD_SHA.
+          Completion requires: the latest round added no new valuable Comment Finding; every valuable substantiated non-duplicate Comment Finding from reports is submitted; GitHub review is verified on PLACEHOLDER_HEAD_SHA.
 
-          Final response: include latest form summary, round count, unresolved limits, checkpoint conclusions, focus response, and submitted comment IDs. If no blocker, use `gh pr review PLACEHOLDER_PR_NUMBER --comment --body "<summary>"`.
+          Final response: include round count, why the last round had no new valuable comment, checkpoint-report summary, focus response, and submitted comment IDs. If no blocker, use `gh pr review PLACEHOLDER_PR_NUMBER --comment --body "<summary>"`.
           - Note that when submitting review comments in this way, the content will not be escaped, so you need to input multi-line text with line breaks directly, rather than using `\n`.
           If issues exist, submit inline comments through GitHub Reviews API JSON: {"event":"REQUEST_CHANGES","body":"<summary>","comments":[{"path":"<file>","position":<diff_position>,"body":"..."}]}. Use suggested changes only for precise small fixes.
           PROMPT
@@ -367,14 +367,14 @@ jobs:
           This is the shared source of truth for subagent-driven review.
 
           Rules:
-          - The main agent coordinates only: it starts rounds, reads forms, decides whether another round is required, submits final comments, and verifies GitHub API results.
+          - The main agent coordinates only: it starts rounds, reads reports, detects new valuable non-duplicate comments, submits final comments, and verifies GitHub API results.
           - The main agent must not independently review code for new findings.
           - Each review round uses one fresh full-scope subagent session, not multiple focus-split subagents.
           - Spawned subagents must not inherit main-agent conversation/context; their prompt must be self-contained.
-          - Each subagent must read this whole file, including prior forms, and append exactly one completed Review Progress Form under its own round section.
-          - Prior forms are not trusted facts. Later subagents use them only as leads for deeper re-checking, not as proof.
+          - Each subagent must read this whole file, including prior reports, and append exactly one Critical Checkpoint Report under its own round section.
+          - Prior reports are not trusted facts. Later subagents use them only as leads for deeper re-checking, not as proof.
           - Subagents must not rewrite this file, edit another section, edit repository source files, or submit GitHub comments.
-          - Main must run fresh full-scope rounds until round 3 completes, unless a round explicitly states `NO_NEW_VALUABLE_COMMENTS` with complete evidence and no unresolved valuable suspicion.
+          - Main must run another fresh full-scope round whenever this round produced any new valuable non-duplicate Comment Finding. Main stops only when a round adds no new valuable Comment Finding.
 
           Candidate statuses:
           - proposed_by_subagent
@@ -397,30 +397,28 @@ jobs:
           - Critical Checkpoint coverage map:
           - Round limit:
 
-          ## Review Round Forms
+          ## Review Round Critical Checkpoint Reports
 
-          Each subagent appends one form in a new `### Round N - Full Scope Subagent` section:
+          Each subagent appends one report in a new `### Round N - Full Scope Subagent` section:
 
           - Round:
             Subagent:
             Context read:
             Scope reviewed:
-            Overall status: complete / incomplete / blocked
-            Completion marker: NO_NEW_VALUABLE_COMMENTS / NEW_COMMENTS_FOUND / INCOMPLETE
-            Needs another round: yes / no
-            Prior-form rechecks:
-            Missing or weak areas:
-            Remaining unresolved suspicions:
-            User-focus conclusion:
-            Critical Checkpoint progress:
-              - Checkpoint:
-                Status: complete / incomplete / blocked / N/A
+            Review progress:
+            Prior-report rechecks:
+            Logic needing deeper probing:
+            User-focus response:
+            Critical Checkpoint responses:
+              - Checkpoint: copy one Part 1.3 checkpoint item
+                Applicability: applicable / N/A
+                Progress:
                 Evidence:
-                Findings:
+                Comment findings:
                 Dismissed suspicions:
-                Remaining work:
+                Deeper probing logic:
 
-          Candidate format:
+          Comment Finding format:
 
           - ID:
             Path:
@@ -439,9 +437,11 @@ jobs:
           Main records one decision after each round:
 
           - Round:
+            New valuable non-duplicate Comment Findings in this round:
+            Duplicate or already-known findings in this round:
             Decision: continue / submit
-            Reason based only on form:
-            Gaps passed to next round:
+            Reason based only on report:
+            Leads passed to next round:
 
           ## Final Comment Set From Subagent Forms
 
