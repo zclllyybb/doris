@@ -17,7 +17,6 @@ Use this when you need to review code, whether it is code you just completed or 
 1. **Always read and respond to Part 1** (General Principles) — it applies to all code.
 2. For module-specific review, **read the `AGENTS.md` in the corresponding source directory** listed in Part 2. Those files contain non-obvious conventions and traps specific to each subsystem.
 3. Parts 3–7 cover cross-module concerns, testing, high-risk patterns, functions, and standards — refer as needed.
-4. In automated PR review, treat the Critical Checkpoints as the required coverage map: every applicable checkpoint needs a conclusion with code evidence, or a clear reason why it is not applicable.
 
 ---
 
