@@ -17,6 +17,7 @@
 
 package org.apache.doris.qe.runtime;
 
+import org.apache.doris.common.IdGenerator;
 import org.apache.doris.nereids.StatementContext;
 import org.apache.doris.nereids.trees.AbstractTreeNode;
 import org.apache.doris.nereids.trees.plans.distribute.DistributeContext;
@@ -27,8 +28,14 @@ import org.apache.doris.nereids.trees.plans.distribute.worker.job.DefaultScanSou
 import org.apache.doris.nereids.trees.plans.distribute.worker.job.UnassignedJob;
 import org.apache.doris.planner.ExchangeNode;
 import org.apache.doris.planner.PlanFragment;
+import org.apache.doris.planner.PlanFragmentId;
+import org.apache.doris.planner.PlanNode;
+import org.apache.doris.planner.PlanNodeId;
+import org.apache.doris.planner.RuntimeFilter;
+import org.apache.doris.planner.RuntimeFilterId;
 import org.apache.doris.planner.ScanNode;
 import org.apache.doris.system.Backend;
+import org.apache.doris.thrift.TRuntimeFilterParams;
 import org.apache.doris.thrift.TUniqueId;
 
 import com.google.common.collect.ArrayListMultimap;
@@ -36,10 +43,13 @@ import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.ListMultimap;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RuntimeFiltersThriftBuilderTest {
@@ -59,6 +69,43 @@ public class RuntimeFiltersThriftBuilderTest {
         Assertions.assertTrue(candidates.contains(RuntimeFiltersThriftBuilder.selectMergeWorker(distributedPlans)));
     }
 
+    @Test
+    public void testPopulateBroadcastRuntimeFilterProducerParams() {
+        BackendWorker worker1 = newBackendWorker(1);
+        BackendWorker worker2 = newBackendWorker(2);
+        BackendWorker worker3 = newBackendWorker(3);
+
+        IdGenerator<RuntimeFilterId> idGenerator = RuntimeFilterId.createGenerator();
+        RuntimeFilterId broadcastRid1 = idGenerator.getNextId();
+        RuntimeFilterId broadcastRid2 = idGenerator.getNextId();
+        RuntimeFilterId shuffleRid = idGenerator.getNextId();
+        RuntimeFilter broadcastRf1 = newRuntimeFilter(broadcastRid1, 10, true, true);
+        RuntimeFilter broadcastRf2 = newRuntimeFilter(broadcastRid2, 10, true, true);
+        RuntimeFilter shuffleRf = newRuntimeFilter(shuffleRid, 11, false, true);
+
+        PlanFragment fragment = newFragment(0, broadcastRid1, broadcastRid2, shuffleRid);
+        PipelineDistributedPlan distributedPlan = newDistributedPlan(fragment, worker1, worker2, worker3);
+        RuntimeFiltersThriftBuilder builder = RuntimeFiltersThriftBuilder.compute(
+                Arrays.asList(broadcastRf1, broadcastRf2, shuffleRf),
+                Collections.singletonList(distributedPlan), 1);
+
+        int selectedWorkerNum = 0;
+        for (BackendWorker worker : Arrays.asList(worker1, worker2, worker3)) {
+            TRuntimeFilterParams params = new TRuntimeFilterParams();
+            builder.populateBroadcastRuntimeFilterProducerParams(params, worker);
+            Assertions.assertTrue(params.isSetBroadcastRuntimeFilterProducerFilterIds());
+            List<Integer> producerFilterIds = params.getBroadcastRuntimeFilterProducerFilterIds();
+            Assertions.assertFalse(producerFilterIds.contains(shuffleRid.asInt()));
+            if (producerFilterIds.isEmpty()) {
+                continue;
+            }
+            selectedWorkerNum++;
+            Assertions.assertEquals(new HashSet<>(Arrays.asList(
+                    broadcastRid1.asInt(), broadcastRid2.asInt())), new HashSet<>(producerFilterIds));
+        }
+        Assertions.assertEquals(1, selectedWorkerNum);
+    }
+
     private BackendWorker newBackendWorker(long id) {
         Backend backend = new Backend(id, "host" + id, (int) (9000 + id));
         backend.setBePort((int) (8000 + id));
@@ -67,7 +114,12 @@ public class RuntimeFiltersThriftBuilderTest {
     }
 
     private PipelineDistributedPlan newDistributedPlan(BackendWorker... workers) {
+        return newDistributedPlan(null, workers);
+    }
+
+    private PipelineDistributedPlan newDistributedPlan(PlanFragment fragment, BackendWorker... workers) {
         TestUnassignedJob unassignedJob = new TestUnassignedJob();
+        unassignedJob.fragment = fragment;
         List<AssignedJob> assignedJobs = Arrays.stream(workers)
                 .map(worker -> unassignedJob.assignWorkerAndDataSources(
                         0, new TUniqueId(), worker, DefaultScanSource.empty()))
@@ -75,7 +127,31 @@ public class RuntimeFiltersThriftBuilderTest {
         return new PipelineDistributedPlan(unassignedJob, assignedJobs, ImmutableSetMultimap.of());
     }
 
+    private RuntimeFilter newRuntimeFilter(RuntimeFilterId rid, int builderNodeId,
+            boolean isBroadcast, boolean hasRemoteTargets) {
+        PlanNode builderNode = Mockito.mock(PlanNode.class);
+        Mockito.when(builderNode.getId()).thenReturn(new PlanNodeId(builderNodeId));
+
+        RuntimeFilter runtimeFilter = Mockito.mock(RuntimeFilter.class);
+        Mockito.when(runtimeFilter.getFilterId()).thenReturn(rid);
+        Mockito.when(runtimeFilter.getBuilderNode()).thenReturn(builderNode);
+        Mockito.when(runtimeFilter.isBroadcast()).thenReturn(isBroadcast);
+        Mockito.when(runtimeFilter.hasRemoteTargets()).thenReturn(hasRemoteTargets);
+        return runtimeFilter;
+    }
+
+    private PlanFragment newFragment(int fragmentId, RuntimeFilterId... builderRuntimeFilterIds) {
+        PlanFragment fragment = Mockito.mock(PlanFragment.class);
+        Mockito.when(fragment.getFragmentId()).thenReturn(new PlanFragmentId(fragmentId));
+        Set<RuntimeFilterId> builderIds = new HashSet<>(Arrays.asList(builderRuntimeFilterIds));
+        Mockito.when(fragment.getBuilderRuntimeFilterIds()).thenReturn(builderIds);
+        Mockito.when(fragment.getTargetRuntimeFilterIds()).thenReturn(Collections.emptySet());
+        return fragment;
+    }
+
     private static final class TestUnassignedJob extends AbstractTreeNode<UnassignedJob> implements UnassignedJob {
+        private PlanFragment fragment;
+
         private TestUnassignedJob() {
             super(Collections.emptyList());
         }
@@ -87,7 +163,7 @@ public class RuntimeFiltersThriftBuilderTest {
 
         @Override
         public PlanFragment getFragment() {
-            return null;
+            return fragment;
         }
 
         @Override
