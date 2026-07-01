@@ -1907,6 +1907,63 @@ public class AggScalarSubQueryToWindowFunctionTest extends TPCHTestBase implemen
     }
 
     @Test
+    public void testMatchWithDifferentAnalyzerRejected() throws Exception {
+        // ExpressionIdenticalChecker must not match two MATCH_ANY
+        // predicates with different USING ANALYZER clauses.  The
+        // analyzer determines which rows are included, so 'english'
+        // and 'chinese' produce different row sets.  Matching them
+        // would collapse the independent outer and inner filters
+        // and compute the window aggregate under the wrong analyzer.
+        createTable("CREATE TABLE fact_match_analyzer (\n"
+                + "  id INT,\n"
+                + "  k INT,\n"
+                + "  v INT,\n"
+                + "  txt STRING,\n"
+                + "  INDEX idx_txt (`txt`) USING INVERTED\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(id)\n"
+                + "DISTRIBUTED BY HASH(id) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1')");
+        createTable("CREATE TABLE dim_match_analyzer (\n"
+                + "  did INT,\n"
+                + "  k INT NOT NULL,\n"
+                + "  tag INT\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(did)\n"
+                + "DISTRIBUTED BY HASH(did) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1')");
+        addConstraint("alter table dim_match_analyzer add constraint uq_dim_match_analyzer_k unique (k)");
+
+        // Outer MATCH_ANY uses analyzer 'english', inner uses 'chinese'.
+        // After slot replacement, both are MatchAny with the same
+        // children but different analyzers — must NOT be matched.
+        String sql = "SELECT d.did, f.id, f.k, f.v "
+                + "FROM fact_match_analyzer f, dim_match_analyzer d "
+                + "WHERE f.k = d.k "
+                + "  AND f.txt MATCH_ANY 'foo' USING ANALYZER 'english'"
+                + "  AND f.v * 2 > ("
+                + "    SELECT SUM(f2.v) "
+                + "    FROM fact_match_analyzer f2 "
+                + "    WHERE f2.k = d.k"
+                + "      AND f2.txt MATCH_ANY 'foo' USING ANALYZER 'chinese'"
+                + "  )";
+
+        Plan plan = PlanChecker.from(createCascadesContext(sql))
+                .analyze(sql)
+                .applyBottomUp(new PullUpProjectUnderApply())
+                .customRewrite(new EliminateUnnecessaryProject())
+                .customRewrite(new AggScalarSubQueryToWindowFunction())
+                .getPlan();
+
+        // Rule must NOT match — MATCH with different analyzers are
+        // different predicates even though they share the same
+        // MatchAny class and children after slot replacement.
+        Assertions.assertFalse(plan.anyMatch(LogicalWindow.class::isInstance),
+                "Rewrite must be rejected when MATCH predicates have "
+                + "different USING ANALYZER clauses");
+    }
+
+    @Test
     public void testStackedPruningProjectsExpanded() throws Exception {
         // When the shared table is behind multiple stacked pruning
         // projects — e.g. SubQueryAlias sf → Project(k) → Project(k)

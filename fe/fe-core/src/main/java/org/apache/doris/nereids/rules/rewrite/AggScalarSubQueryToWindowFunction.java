@@ -23,6 +23,7 @@ import org.apache.doris.nereids.trees.expressions.Alias;
 import org.apache.doris.nereids.trees.expressions.ComparisonPredicate;
 import org.apache.doris.nereids.trees.expressions.ExprId;
 import org.apache.doris.nereids.trees.expressions.Expression;
+import org.apache.doris.nereids.trees.expressions.Match;
 import org.apache.doris.nereids.trees.expressions.NamedExpression;
 import org.apache.doris.nereids.trees.expressions.Slot;
 import org.apache.doris.nereids.trees.expressions.SlotReference;
@@ -790,6 +791,20 @@ public class AggScalarSubQueryToWindowFunction extends DefaultPlanRewriter<JobCo
             return isClassMatch(boundFunction, other)
                     && Objects.equals(boundFunction.getName(), ((BoundFunction) other).getName())
                     && isSameChild(boundFunction, other);
+        }
+
+        @Override
+        public Boolean visitMatch(Match match, Expression other) {
+            // Match predicates (MATCH_ANY, MATCH_ALL, …) carry an analyzer
+            // (USING ANALYZER clause) that changes which rows are included.
+            // Two structurally identical MATCH nodes with different
+            // analyzers are semantically different predicates.
+            if (!isClassMatch(match, other)) {
+                return false;
+            }
+            Match otherMatch = (Match) other;
+            return Objects.equals(match.getAnalyzer(), otherMatch.getAnalyzer())
+                    && isSameChild(match, other);
         }
 
         @Override
