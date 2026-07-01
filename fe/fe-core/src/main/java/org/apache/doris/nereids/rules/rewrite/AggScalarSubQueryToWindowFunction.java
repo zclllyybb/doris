@@ -34,6 +34,7 @@ import org.apache.doris.nereids.trees.expressions.functions.agg.NullableAggregat
 import org.apache.doris.nereids.trees.expressions.functions.window.SupportWindowAnalytic;
 import org.apache.doris.nereids.trees.expressions.literal.Literal;
 import org.apache.doris.nereids.trees.expressions.visitor.DefaultExpressionVisitor;
+import org.apache.doris.nereids.trees.plans.JoinType;
 import org.apache.doris.nereids.trees.plans.Plan;
 import org.apache.doris.nereids.trees.plans.algebra.CatalogRelation;
 import org.apache.doris.nereids.trees.plans.algebra.Filter;
@@ -255,19 +256,30 @@ public class AggScalarSubQueryToWindowFunction extends DefaultPlanRewriter<JobCo
     }
 
     /**
-     * check join to ensure no condition on it.
-     * this is because we cannot do accurate pattern match between outer scope and inner scope
-     * so, we currently forbid join with condition here.
+     * Reject joins that are unsafe for the WinMagic window rewrite.
+     * <p>
+     * Only {@link JoinType#INNER_JOIN} and {@link JoinType#CROSS_JOIN} are
+     * accepted.  Semi/anti joins output only one side and would cause the
+     * window to reference slots not produced by its child; outer joins
+     * introduce null-extended rows that corrupt {@code COUNT(*)} and other
+     * aggregates (a null-padded outer-join row makes {@code COUNT(*) OVER (…)}
+     * return 1 where the original scalar subquery would return 0).
+     * <p>
+     * Additionally, any ON clause condition is forbidden because the rule
+     * cannot accurately pattern-match predicates between outer and inner scope
+     * when the join carries its own condition.
      */
     private boolean checkJoin() {
         return outerPlans.stream()
                 .filter(LogicalJoin.class::isInstance)
                 .map(p -> (LogicalJoin<Plan, Plan>) p)
-                .noneMatch(j -> j.getOnClauseCondition().isPresent())
+                .allMatch(j -> j.getJoinType().isInnerOrCrossJoin()
+                        && !j.getOnClauseCondition().isPresent())
                 && innerPlans.stream()
                 .filter(LogicalJoin.class::isInstance)
                 .map(p -> (LogicalJoin<Plan, Plan>) p)
-                .noneMatch(j -> j.getOnClauseCondition().isPresent());
+                .allMatch(j -> j.getJoinType().isInnerOrCrossJoin()
+                        && !j.getOnClauseCondition().isPresent());
     }
 
     /**
