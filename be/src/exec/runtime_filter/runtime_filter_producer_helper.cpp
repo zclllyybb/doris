@@ -20,6 +20,7 @@
 #include <gen_cpp/Metrics_types.h>
 
 #include "exec/pipeline/pipeline_task.h"
+#include "exec/runtime_filter/runtime_filter_mgr.h"
 #include "exec/runtime_filter/runtime_filter_wrapper.h"
 #include "exprs/vexpr.h"
 
@@ -65,12 +66,20 @@ Status RuntimeFilterProducerHelper::_init(
         RuntimeState* state, const VExprContextSPtrs& build_expr_ctxs,
         const std::vector<TRuntimeFilterDesc>& runtime_filter_descs,
         const RowDescriptor* row_desc) {
-    _producers.resize(runtime_filter_descs.size());
-    for (size_t i = 0; i < runtime_filter_descs.size(); i++) {
-        RETURN_IF_ERROR(
-                state->register_producer_runtime_filter(runtime_filter_descs[i], &_producers[i]));
+    std::vector<TRuntimeFilterDesc> producer_runtime_filter_descs;
+    producer_runtime_filter_descs.reserve(runtime_filter_descs.size());
+    for (const auto& desc : runtime_filter_descs) {
+        if (state->global_runtime_filter_mgr()->should_build_runtime_filter_producer(desc)) {
+            producer_runtime_filter_descs.push_back(desc);
+        }
     }
-    RETURN_IF_ERROR(_init_expr(build_expr_ctxs, runtime_filter_descs));
+
+    _producers.resize(producer_runtime_filter_descs.size());
+    for (size_t i = 0; i < producer_runtime_filter_descs.size(); i++) {
+        RETURN_IF_ERROR(state->register_producer_runtime_filter(producer_runtime_filter_descs[i],
+                                                                &_producers[i]));
+    }
+    RETURN_IF_ERROR(_init_expr(build_expr_ctxs, producer_runtime_filter_descs));
     if (_decoupled_filter_indices.empty()) {
         return Status::OK();
     }

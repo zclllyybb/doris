@@ -111,6 +111,7 @@ public:
     // update filter by remote
     bool set_runtime_filter_params(const TRuntimeFilterParams& runtime_filter_params);
     Status get_merge_addr(TNetworkAddress* addr);
+    bool should_build_runtime_filter_producer(const TRuntimeFilterDesc& desc);
     Status sync_filter_size(const PSyncFilterSizeRequest* request);
 
     std::string debug_string();
@@ -151,6 +152,8 @@ private:
     TNetworkAddress _merge_addr;
 
     bool _has_merge_addr = false;
+    bool _has_broadcast_runtime_filter_producer_filter_ids = false;
+    std::unordered_set<int32_t> _broadcast_runtime_filter_producer_filter_ids;
     std::mutex _lock;
 };
 

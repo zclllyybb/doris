@@ -167,6 +167,13 @@ Status RuntimeFilterMgr::register_producer_filter(
 bool RuntimeFilterMgr::set_runtime_filter_params(
         const TRuntimeFilterParams& runtime_filter_params) {
     std::lock_guard l(_lock);
+    if (runtime_filter_params.__isset.broadcast_runtime_filter_producer_filter_ids) {
+        _broadcast_runtime_filter_producer_filter_ids.clear();
+        _broadcast_runtime_filter_producer_filter_ids.insert(
+                runtime_filter_params.broadcast_runtime_filter_producer_filter_ids.begin(),
+                runtime_filter_params.broadcast_runtime_filter_producer_filter_ids.end());
+        _has_broadcast_runtime_filter_producer_filter_ids = true;
+    }
     if (!_has_merge_addr) {
         _merge_addr = runtime_filter_params.runtime_filter_merge_addr;
         _has_merge_addr = true;
@@ -181,6 +188,17 @@ Status RuntimeFilterMgr::get_merge_addr(TNetworkAddress* addr) {
         return Status::OK();
     }
     return Status::InternalError("not found merge addr");
+}
+
+bool RuntimeFilterMgr::should_build_runtime_filter_producer(const TRuntimeFilterDesc& desc) {
+    std::lock_guard l(_lock);
+    if (!_has_broadcast_runtime_filter_producer_filter_ids) {
+        return true;
+    }
+    if (!desc.is_broadcast_join || !desc.has_remote_targets) {
+        return true;
+    }
+    return _broadcast_runtime_filter_producer_filter_ids.contains(desc.filter_id);
 }
 
 Status RuntimeFilterMergeControllerEntity::_init_with_desc(
