@@ -24,7 +24,7 @@ suite("correlated_scalar_subquery_to_window_function") {
         set forbid_unknown_col_stats=false;
         set enable_stats=true;
         set runtime_filter_type=8;
-        set broadcast_row_count_limit = 30000000;
+        set broadcast_row_count_limit = 0;
         set enable_nereids_timeout = false;
         set enable_pipeline_engine = true;
         set disable_nereids_rules='PRUNE_EMPTY_PARTITION';
