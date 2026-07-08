@@ -146,6 +146,38 @@ TEST_F(RuntimeFilterMgrTest, TestRuntimeFilterMgr) {
     }
 }
 
+TEST_F(RuntimeFilterMgrTest, TestBroadcastRuntimeFilterProducerPruning) {
+    RuntimeFilterMgr mgr(true);
+    auto allowed_broadcast =
+            TRuntimeFilterDescBuilder(1).set_is_broadcast_join(true).set_mode(false).build();
+    auto rejected_broadcast =
+            TRuntimeFilterDescBuilder(2).set_is_broadcast_join(true).set_mode(false).build();
+    auto local_broadcast =
+            TRuntimeFilterDescBuilder(3).set_is_broadcast_join(true).set_mode(true).build();
+    auto shuffle_rf = TRuntimeFilterDescBuilder(4).set_mode(false).build();
+
+    EXPECT_TRUE(mgr.should_build_runtime_filter_producer(allowed_broadcast));
+    EXPECT_TRUE(mgr.should_build_runtime_filter_producer(rejected_broadcast));
+
+    TRuntimeFilterParams param;
+    param.__set_runtime_filter_merge_addr(TNetworkAddress());
+    param.__set_broadcast_runtime_filter_producer_filter_ids({1});
+    EXPECT_TRUE(mgr.set_runtime_filter_params(param));
+
+    EXPECT_TRUE(mgr.should_build_runtime_filter_producer(allowed_broadcast));
+    EXPECT_FALSE(mgr.should_build_runtime_filter_producer(rejected_broadcast));
+    EXPECT_TRUE(mgr.should_build_runtime_filter_producer(local_broadcast));
+    EXPECT_TRUE(mgr.should_build_runtime_filter_producer(shuffle_rf));
+
+    RuntimeFilterMgr empty_allow_list_mgr(true);
+    TRuntimeFilterParams empty_param;
+    empty_param.__set_runtime_filter_merge_addr(TNetworkAddress());
+    empty_param.__set_broadcast_runtime_filter_producer_filter_ids({});
+    EXPECT_TRUE(empty_allow_list_mgr.set_runtime_filter_params(empty_param));
+    EXPECT_FALSE(empty_allow_list_mgr.should_build_runtime_filter_producer(allowed_broadcast));
+    EXPECT_TRUE(empty_allow_list_mgr.should_build_runtime_filter_producer(local_broadcast));
+}
+
 TEST_F(RuntimeFilterMgrTest, TestRuntimeFilterMergeControllerEntity) {
     int rid = 1;
     UniqueId query_id;

@@ -116,8 +116,12 @@ public class ThriftPlansBuilder {
         // we should set runtime predicate first, then we can use heap sort and to thrift
         setRuntimePredicateIfNeed(coordinatorContext.scanNodes);
 
+        int broadcastRuntimeFilterProducerNum = coordinatorContext.connectContext == null
+                ? 0
+                : coordinatorContext.connectContext.getSessionVariable()
+                        .getRuntimeFilterBroadcastJoinProducerNum();
         RuntimeFiltersThriftBuilder runtimeFiltersThriftBuilder = RuntimeFiltersThriftBuilder.compute(
-                coordinatorContext.runtimeFilters, distributedPlans);
+                coordinatorContext.runtimeFilters, distributedPlans, broadcastRuntimeFilterProducerNum);
         Supplier<List<TTopnFilterDesc>> topNFilterThriftSupplier
                 = topNFilterToThrift(coordinatorContext.topnFilters);
 
@@ -349,6 +353,7 @@ public class ThriftPlansBuilder {
 
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
         runtimeFilterParams.setRuntimeFilterMergeAddr(runtimeFiltersThriftBuilder.mergeAddress);
+        runtimeFiltersThriftBuilder.populateBroadcastRuntimeFilterProducerParams(runtimeFilterParams, worker);
         if (worker.host().equals(runtimeFiltersThriftBuilder.mergeAddress.getHostname())
                 && worker.brpcPort() == runtimeFiltersThriftBuilder.mergeAddress.getPort()) {
             // only set following information for merge BE node
