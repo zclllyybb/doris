@@ -544,6 +544,10 @@ struct TRuntimeFilterParams {
 
   // Used if this filter has a remote target
   5: optional map<i32, list<TRuntimeFilterTargetParamsV2>> rid_to_target_paramv2
+
+  // If set, this BE only builds the listed broadcast join runtime filters.
+  // Unset means there is no producer-side pruning.
+  6: optional list<i32> broadcast_runtime_filter_producer_filter_ids
 }
 
 // Parameters for a single execution instance of a particular TPlanFragment
