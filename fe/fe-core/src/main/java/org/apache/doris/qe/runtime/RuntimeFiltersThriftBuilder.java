@@ -33,6 +33,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,17 +49,32 @@ public class RuntimeFiltersThriftBuilder {
     private final Set<Integer> broadcastRuntimeFilterIds;
     private final Map<RuntimeFilterId, List<RuntimeFilterTarget>> ridToTargets;
     private final Map<RuntimeFilterId, Integer> ridToBuilderNum;
+    private final boolean limitBroadcastRuntimeFilterProducers;
+    private final Map<Long, List<Integer>> workerIdToBroadcastRuntimeFilterIds;
 
     private RuntimeFiltersThriftBuilder(
             TNetworkAddress mergeAddress, List<RuntimeFilter> runtimeFilters,
             Set<Integer> broadcastRuntimeFilterIds,
             Map<RuntimeFilterId, List<RuntimeFilterTarget>> ridToTargets,
-            Map<RuntimeFilterId, Integer> ridToBuilderNum) {
+            Map<RuntimeFilterId, Integer> ridToBuilderNum,
+            boolean limitBroadcastRuntimeFilterProducers,
+            Map<Long, List<Integer>> workerIdToBroadcastRuntimeFilterIds) {
         this.mergeAddress = mergeAddress;
         this.runtimeFilters = runtimeFilters;
         this.broadcastRuntimeFilterIds = broadcastRuntimeFilterIds;
         this.ridToTargets = ridToTargets;
         this.ridToBuilderNum = ridToBuilderNum;
+        this.limitBroadcastRuntimeFilterProducers = limitBroadcastRuntimeFilterProducers;
+        this.workerIdToBroadcastRuntimeFilterIds = workerIdToBroadcastRuntimeFilterIds;
+    }
+
+    public void populateBroadcastRuntimeFilterProducerParams(
+            TRuntimeFilterParams runtimeFilterParams, DistributedPlanWorker worker) {
+        if (!limitBroadcastRuntimeFilterProducers) {
+            return;
+        }
+        runtimeFilterParams.setBroadcastRuntimeFilterProducerFilterIds(
+                workerIdToBroadcastRuntimeFilterIds.getOrDefault(worker.id(), Collections.emptyList()));
     }
 
     public void populateRuntimeFilterParams(TRuntimeFilterParams runtimeFilterParams) {
@@ -100,8 +116,19 @@ public class RuntimeFiltersThriftBuilder {
 
     public static RuntimeFiltersThriftBuilder compute(
             List<RuntimeFilter> runtimeFilters, List<PipelineDistributedPlan> distributedPlans) {
+        return compute(runtimeFilters, distributedPlans, 0);
+    }
+
+    public static RuntimeFiltersThriftBuilder compute(
+            List<RuntimeFilter> runtimeFilters, List<PipelineDistributedPlan> distributedPlans,
+            int broadcastRuntimeFilterProducerNum) {
         BackendWorker worker = selectMergeWorker(distributedPlans);
         TNetworkAddress mergeAddress = new TNetworkAddress(worker.host(), worker.brpcPort());
+
+        Map<Integer, RuntimeFilter> idToRuntimeFilter = runtimeFilters
+                .stream()
+                .collect(Collectors.toMap(r -> r.getFilterId().asInt(), r -> r, (left, right) -> left,
+                        LinkedHashMap::new));
 
         Set<Integer> broadcastRuntimeFilterIds = runtimeFilters
                 .stream()
@@ -111,6 +138,9 @@ public class RuntimeFiltersThriftBuilder {
 
         Map<RuntimeFilterId, List<RuntimeFilterTarget>> ridToTargetParam = Maps.newLinkedHashMap();
         Map<RuntimeFilterId, Integer> ridToBuilderNum = Maps.newLinkedHashMap();
+        Map<Integer, List<BackendWorker>> builderNodeToProducerWorkers = Maps.newLinkedHashMap();
+        Map<Long, List<Integer>> workerIdToBroadcastRuntimeFilterIds = Maps.newLinkedHashMap();
+        boolean limitBroadcastRuntimeFilterProducers = broadcastRuntimeFilterProducerNum > 0;
         for (PipelineDistributedPlan plan : distributedPlans) {
             PlanFragment fragment = plan.getFragmentJob().getFragment();
             // Transform <fragment, runtimeFilterId> to <runtimeFilterId, fragment>
@@ -126,18 +156,49 @@ public class RuntimeFiltersThriftBuilder {
                 }
             }
 
+            List<BackendWorker> builderWorkers = collectDistinctBackendWorkers(plan.getInstanceJobs());
+            int distinctWorkerNum = builderWorkers.size();
             for (RuntimeFilterId rid : fragment.getBuilderRuntimeFilterIds()) {
-                int distinctWorkerNum = (int) plan.getInstanceJobs()
-                        .stream()
-                        .map(AssignedJob::getAssignedWorker)
-                        .map(DistributedPlanWorker::id)
-                        .distinct()
-                        .count();
                 ridToBuilderNum.merge(rid, distinctWorkerNum, Integer::sum);
+                RuntimeFilter rf = idToRuntimeFilter.get(rid.asInt());
+                if (limitBroadcastRuntimeFilterProducers
+                        && rf != null && rf.isBroadcast() && rf.hasRemoteTargets()) {
+                    int builderNodeId = rf.getBuilderNode().getId().asInt();
+                    List<BackendWorker> producerWorkers = builderNodeToProducerWorkers.computeIfAbsent(
+                            builderNodeId,
+                            id -> selectBroadcastRuntimeFilterProducerWorkers(
+                                    builderWorkers, broadcastRuntimeFilterProducerNum));
+                    for (BackendWorker producerWorker : producerWorkers) {
+                        workerIdToBroadcastRuntimeFilterIds.computeIfAbsent(
+                                producerWorker.id(), id -> new ArrayList<>()).add(rid.asInt());
+                    }
+                }
             }
         }
         return new RuntimeFiltersThriftBuilder(
-                mergeAddress, runtimeFilters, broadcastRuntimeFilterIds, ridToTargetParam, ridToBuilderNum);
+                mergeAddress, runtimeFilters, broadcastRuntimeFilterIds, ridToTargetParam, ridToBuilderNum,
+                limitBroadcastRuntimeFilterProducers, workerIdToBroadcastRuntimeFilterIds);
+    }
+
+    static List<BackendWorker> collectDistinctBackendWorkers(List<AssignedJob> instanceJobs) {
+        Map<Long, BackendWorker> workerMap = Maps.newLinkedHashMap();
+        for (AssignedJob instanceJob : instanceJobs) {
+            BackendWorker worker = (BackendWorker) instanceJob.getAssignedWorker();
+            workerMap.putIfAbsent(worker.id(), worker);
+        }
+        return new ArrayList<>(workerMap.values());
+    }
+
+    static List<BackendWorker> selectBroadcastRuntimeFilterProducerWorkers(
+            List<BackendWorker> workers, int producerNum) {
+        Preconditions.checkArgument(producerNum > 0,
+                "broadcast runtime filter producer num must be positive");
+        if (workers.size() <= producerNum) {
+            return workers;
+        }
+        List<BackendWorker> selectedWorkers = new ArrayList<>(workers);
+        Collections.shuffle(selectedWorkers, ThreadLocalRandom.current());
+        return new ArrayList<>(selectedWorkers.subList(0, producerNum));
     }
 
     static BackendWorker selectMergeWorker(List<PipelineDistributedPlan> distributedPlans) {
