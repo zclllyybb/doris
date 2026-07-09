@@ -399,11 +399,27 @@ Status BaseBetaRowsetWriter::add_block(const Block* block) {
     return _segment_creator.add_block(block);
 }
 
+bool BaseBetaRowsetWriter::_is_segment_delete_bitmap_calculated(uint32_t segment_id) const {
+    if (_context.mow_context == nullptr) {
+        // This segcompaction gate is only for local MoW rowsets. Non-MoW rowsets
+        // have no pending async delete bitmap work.
+        return true;
+    }
+    std::lock_guard lock(_delete_bitmap_calculated_segments_mutex);
+    return _delete_bitmap_calculated_segments.contains(segment_id);
+}
+
+void BaseBetaRowsetWriter::_mark_segment_delete_bitmap_calculated(uint32_t segment_id) {
+    std::lock_guard lock(_delete_bitmap_calculated_segments_mutex);
+    _delete_bitmap_calculated_segments.add(segment_id);
+}
+
 Status BaseBetaRowsetWriter::_generate_delete_bitmap(int32_t segment_id) {
     SCOPED_RAW_TIMER(&_delete_bitmap_ns);
     if (_context.is_transient_rowset_writer ||
         !_context.tablet->enable_unique_key_merge_on_write() ||
         (_context.partial_update_info && _context.partial_update_info->is_partial_update())) {
+        _mark_segment_delete_bitmap_calculated(segment_id);
         return Status::OK();
     }
     std::vector<RowsetSharedPtr> specified_rowsets;
@@ -419,6 +435,9 @@ Status BaseBetaRowsetWriter::_generate_delete_bitmap(int32_t segment_id) {
     return _calc_delete_bitmap_token->submit_func(
             [this, segment_id, specified_rowsets = std::move(specified_rowsets)]() -> Status {
                 Status st = Status::OK();
+                // If this async pipeline fails, leave the segment unmarked. build() waits
+                // on the token and aborts this writer; marking here would allow
+                // segcompaction to consume a segment whose delete bitmap was not published.
                 // Step 1: Close file_writer (must be done before load_segments)
                 auto* file_writer = _seg_files.get(segment_id);
                 if (file_writer && file_writer->state() != io::FileWriter::State::CLOSED) {
@@ -438,6 +457,11 @@ Status BaseBetaRowsetWriter::_generate_delete_bitmap(int32_t segment_id) {
                         return st;
                     }
                 }
+
+                DBUG_EXECUTE_IF("BetaRowsetWriter.generate_delete_bitmap.sleep_before_build_tmp", {
+                    auto sleep_ms = dp->param<int64_t>("sleep_ms", 30000);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+                });
 
                 OlapStopWatch watch;
                 // Step 2: Build tmp rowset (needs file_writer to be closed)
@@ -480,6 +504,9 @@ Status BaseBetaRowsetWriter::_generate_delete_bitmap(int32_t segment_id) {
                           << _context.mow_context->delete_bitmap->cardinality()
                           << ", cost: " << watch.get_elapse_time_us()
                           << "(us), total rows: " << total_rows;
+                // Mark only after delete bitmap entries are published to mow_context. Otherwise
+                // segcompaction could convert bitmap before this segment's entries exist.
+                _mark_segment_delete_bitmap_calculated(segment_id);
                 return Status::OK();
             });
 }
@@ -541,6 +568,12 @@ Status BetaRowsetWriter::_find_longest_consecutive_small_segment(
     int32_t segid;
     for (segid = _segcompacted_point;
          segid < last_segment && segments->size() < config::segcompaction_batch_size; segid++) {
+        if (!_is_segment_delete_bitmap_calculated(segid)) {
+            VLOG_DEBUG << "stop segcompaction at segid=" << segid
+                       << " because its delete bitmap is not calculated yet, tablet_id="
+                       << _context.tablet_id << ", rowset_id=" << _context.rowset_id;
+            break;
+        }
         segment_v2::SegmentSharedPtr segment;
         RETURN_IF_ERROR(_load_noncompacted_segment(segment, segid));
         const auto segment_rows = segment->num_rows();
@@ -1277,6 +1310,13 @@ Status BaseBetaRowsetWriter::add_segment(uint32_t segment_id, const SegmentStati
 
 Status BetaRowsetWriter::add_segment(uint32_t segment_id, const SegmentStatistics& segstat) {
     RETURN_IF_ERROR(BaseBetaRowsetWriter::add_segment(segment_id, segstat));
+    DBUG_EXECUTE_IF("BetaRowsetWriter.add_segment.sleep_before_segcompaction", {
+        auto target_segment_id = dp->param<int64_t>("segment_id", -1);
+        if (target_segment_id < 0 || segment_id == target_segment_id) {
+            auto sleep_ms = dp->param<int64_t>("sleep_ms", 200);
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+        }
+    });
     return _segcompaction_if_necessary();
 }
 
