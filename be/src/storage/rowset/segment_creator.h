@@ -112,7 +112,6 @@ public:
 
     Status close();
 
-public:
     class Writer {
         friend class SegmentFlusher;
 
@@ -150,7 +149,6 @@ private:
     Status _flush_segment_writer(std::unique_ptr<segment_v2::VerticalSegmentWriter>& writer,
                                  int64_t* flush_size = nullptr);
 
-private:
     RowsetWriterContext& _context;
     SegmentFileCollection& _seg_files;
     InvertedIndexFileCollection& _idx_files;
